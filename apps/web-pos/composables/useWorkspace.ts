@@ -53,8 +53,20 @@ export const useWorkspace = () => {
   }
 
   const persistOutlet = (outletId: string) => {
-    if (!process.client) return
-    localStorage.setItem('angkringan-active-outlet', outletId)
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('angkringan-active-outlet', outletId)
+      }
+    } catch {}
+  }
+
+  const getSavedOutletId = (): string => {
+    try {
+      if (typeof window !== 'undefined') {
+        return window.localStorage.getItem('angkringan-active-outlet') || ''
+      }
+    } catch {}
+    return ''
   }
 
   const reset = () => {
@@ -87,26 +99,24 @@ export const useWorkspace = () => {
         return
       }
 
+      // best effort edge function call
       try {
         await supabase.functions.invoke('bootstrap-user', { body: {} })
-      } catch {
-        // best effort only
-      }
+      } catch {}
 
-      const [{ data: userData }, profileRes, outletRes] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase.from('profiles').select('id, full_name, role, pin_code, is_active').single(),
+      const userId = sessionData.session.user.id
+
+      const [profileRes, outletRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, role, pin_code, is_active')
+          .eq('id', userId)
+          .single(),
         supabase
           .from('user_outlets')
           .select('outlet_id, outlets(id, name, brand_name, address, phone, timezone, is_active)')
-          .eq('user_id', sessionData.session.user.id)
+          .eq('user_id', userId)
       ])
-
-      if (!userData.user) {
-        reset()
-        initialized.value = true
-        return
-      }
 
       if (profileRes.error) throw profileRes.error
       if (outletRes.error) throw outletRes.error
@@ -116,14 +126,14 @@ export const useWorkspace = () => {
         .map((row: any) => normalizeOutlet(row as unknown as OutletMembershipRow))
         .filter(Boolean) as OutletRow[]
 
-      const savedOutletId = process.client ? localStorage.getItem('angkringan-active-outlet') || '' : ''
-      const preferredOutletId = savedOutletId || activeOutletId.value
-      const chosenOutlet = outlets.value.find((item) => item.id === preferredOutletId) || outlets.value[0] || null
-      activeOutletId.value = chosenOutlet?.id || ''
+      // auto select outlet
+      const savedId = getSavedOutletId()
+      const chosen = outlets.value.find((o) => o.id === savedId) || outlets.value[0] || null
+      activeOutletId.value = chosen?.id || ''
       if (activeOutletId.value) persistOutlet(activeOutletId.value)
 
       if (!outlets.value.length) {
-        error.value = 'Akun ini belum terhubung ke outlet mana pun. Hubungi owner atau manager untuk menambahkan akses outlet.'
+        error.value = 'Akun belum terhubung ke outlet. Hubungi owner.'
       }
     } catch (err: any) {
       console.error('workspace bootstrap error', err)
