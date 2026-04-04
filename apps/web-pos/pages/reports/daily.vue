@@ -1,1 +1,139 @@
-f
+<script setup lang="ts">
+definePageMeta({ middleware: ['auth'] })
+
+const supabase = useSupabaseClient()
+const workspace = useWorkspace()
+
+const date = ref(new Date().toISOString().slice(0, 10))
+const summary = ref<any | null>(null)
+const orders = ref<any[]>([])
+const expenses = ref<any[]>([])
+const loading = ref(false)
+const errorMessage = ref('')
+
+const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
+
+const load = async () => {
+  if (!workspace.activeOutletId.value) return
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    const [summaryRes, orderRes, expenseRes] = await Promise.all([
+      supabase
+        .from('vw_daily_sales_summary')
+        .select('*')
+        .eq('outlet_id', workspace.activeOutletId.value)
+        .eq('business_date', date.value)
+        .maybeSingle(),
+      supabase
+        .from('orders')
+        .select('id, order_no, customer_name, payment_method, total, paid_at, status')
+        .eq('outlet_id', workspace.activeOutletId.value)
+        .gte('paid_at', `${date.value}T00:00:00`)
+        .lte('paid_at', `${date.value}T23:59:59`)
+        .order('paid_at', { ascending: false }),
+      supabase
+        .from('expenses')
+        .select('id, category, description, amount, spent_at')
+        .eq('outlet_id', workspace.activeOutletId.value)
+        .gte('spent_at', `${date.value}T00:00:00`)
+        .lte('spent_at', `${date.value}T23:59:59`)
+        .order('spent_at', { ascending: false })
+    ])
+
+    if (summaryRes.error) throw summaryRes.error
+    if (orderRes.error) throw orderRes.error
+    if (expenseRes.error) throw expenseRes.error
+
+    summary.value = summaryRes.data
+    orders.value = orderRes.data || []
+    expenses.value = expenseRes.data || []
+  } catch (error: any) {
+    errorMessage.value = error?.message || 'Gagal memuat laporan harian.'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(async () => {
+  await workspace.bootstrap()
+  await load()
+})
+
+watch([() => workspace.activeOutletId.value, date], async () => {
+  await load()
+})
+</script>
+
+<template>
+  <div class="page">
+    <section class="section-title">
+      <div>
+        <h1 class="title">Laporan Harian</h1>
+        <p class="subtitle">Ringkasan penjualan, biaya, dan kas bersih per tanggal outlet aktif.</p>
+      </div>
+      <div class="toolbar">
+        <input v-model="date" class="input" type="date" />
+        <button class="btn btn-secondary" @click="load">Refresh</button>
+      </div>
+    </section>
+
+    <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+    <div v-if="loading" class="empty-state">Memuat laporan...</div>
+
+    <template v-else>
+      <div class="grid grid-4">
+        <article class="kpi-card"><h3>Gross sales</h3><div class="value">{{ formatCurrency(summary?.gross_sales || 0) }}</div><div class="hint">Dari semua order paid</div></article>
+        <article class="kpi-card"><h3>COGS</h3><div class="value">{{ formatCurrency(summary?.cogs || 0) }}</div><div class="hint">Akumulasi modal menu terjual</div></article>
+        <article class="kpi-card"><h3>Pengeluaran</h3><div class="value">{{ formatCurrency(summary?.expenses_amount || 0) }}</div><div class="hint">Biaya operasional tanggal ini</div></article>
+        <article class="kpi-card"><h3>Kas bersih</h3><div class="value">{{ formatCurrency(summary?.net_cash || 0) }}</div><div class="hint">Omzet - modal - pengeluaran</div></article>
+      </div>
+
+      <div class="grid grid-2">
+        <section class="card stack">
+          <div>
+            <h2 style="margin:0">Transaksi tanggal terpilih</h2>
+            <p class="subtitle">Semua transaksi paid yang masuk pada tanggal tersebut.</p>
+          </div>
+          <div v-if="!orders.length" class="empty-state">Belum ada transaksi paid pada tanggal ini.</div>
+          <div v-else class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Order</th><th>Pelanggan</th><th>Metode</th><th>Waktu</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr v-for="order in orders" :key="order.id">
+                  <td><strong>{{ order.order_no }}</strong></td>
+                  <td>{{ order.customer_name || 'Umum' }}</td>
+                  <td>{{ order.payment_method }}</td>
+                  <td>{{ new Date(order.paid_at).toLocaleString('id-ID') }}</td>
+                  <td><strong>{{ formatCurrency(order.total) }}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card stack">
+          <div>
+            <h2 style="margin:0">Pengeluaran tanggal terpilih</h2>
+            <p class="subtitle">Pastikan semua biaya tercatat agar angka kas sesuai kenyataan.</p>
+          </div>
+          <div v-if="!expenses.length" class="empty-state">Tidak ada pengeluaran pada tanggal ini.</div>
+          <div v-else class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Kategori</th><th>Deskripsi</th><th>Waktu</th><th>Nominal</th></tr></thead>
+              <tbody>
+                <tr v-for="expense in expenses" :key="expense.id">
+                  <td><strong>{{ expense.category }}</strong></td>
+                  <td>{{ expense.description }}</td>
+                  <td>{{ new Date(expense.spent_at).toLocaleString('id-ID') }}</td>
+                  <td><strong>{{ formatCurrency(expense.amount) }}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </template>
+  </div>
+</template>
