@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "corepack pnpm install --no-frozen-lockfile",
+  "buildCommand": "corepack pnpm --filter web-pos exec nuxt generate",
+  "outputDirectory": "apps/web-pos/.output/public"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "angkringan-pos-v2",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "pnpm --filter web-pos dev",
+    "build": "pnpm --filter web-pos build",
+    "preview": "pnpm --filter web-pos preview"
+  }
+}
