@@ -6,5 +6,8 @@
     "dev": "pnpm --filter web-pos dev",
     "build": "pnpm --filter web-pos build",
     "preview": "pnpm --filter web-pos preview"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@parcel/watcher", "esbuild"]
   }
 }
