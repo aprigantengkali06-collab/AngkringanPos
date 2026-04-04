@@ -1,7 +1,23 @@
 <script setup lang="ts">
 const route = useRoute()
 const config = useRuntimeConfig()
-const workspace = useWorkspace()
+
+// ✅ FIX: Destructure refs dari composable supaya Vue template bisa auto-unwrap
+// Sebelumnya: const workspace = useWorkspace()
+// Bug: workspace.profile adalah Ref object, bukan nilai langsung
+// Sehingga workspace.profile?.full_name = undefined → tampil "Memuat..."
+// Sehingga workspace.profile?.role = undefined → tampil "user"
+const {
+  profile,
+  outlets,
+  activeOutlet,
+  activeOutletId,
+  error,
+  canManage,
+  bootstrap,
+  switchOutlet,
+  signOut
+} = useWorkspace()
 
 const navItems = computed(() => {
   const base = [
@@ -12,7 +28,8 @@ const navItems = computed(() => {
     { to: '/shifts', label: 'Shift', icon: '⏱️' }
   ]
 
-  if (workspace.canManage.value) {
+  // ✅ FIX: canManage sekarang top-level ref, di script tetap pakai .value
+  if (canManage.value) {
     base.push(
       { to: '/products', label: 'Produk', icon: '🍜' },
       { to: '/categories', label: 'Kategori', icon: '🗂️' },
@@ -31,13 +48,13 @@ const appName = computed(() => config.public.appName)
 
 onMounted(async () => {
   if (showShell.value) {
-    await workspace.bootstrap()
+    await bootstrap()
   }
 })
 
 watch(() => route.path, async (path) => {
   if (path !== '/login') {
-    await workspace.bootstrap()
+    await bootstrap()
   }
 })
 </script>
@@ -66,13 +83,17 @@ watch(() => route.path, async (path) => {
         </NuxtLink>
       </nav>
 
+      <!-- ✅ FIX: profile sekarang top-level ref, Vue auto-unwrap di template -->
+      <!-- Sebelum: workspace.profile?.full_name → undefined (Ref object tidak punya .full_name) -->
+      <!-- Sesudah: profile?.full_name → tampil nama benar karena Ref di-unwrap otomatis -->
       <div class="sidebar-panel">
         <p class="eyebrow">Akun aktif</p>
         <div class="sidebar-user">
-          <strong>{{ workspace.profile?.full_name || 'Memuat...' }}</strong>
-          <span class="badge badge-soft">{{ workspace.profile?.role || 'user' }}</span>
+          <strong>{{ profile?.full_name || 'Memuat...' }}</strong>
+          <span class="badge badge-soft">{{ profile?.role || 'user' }}</span>
         </div>
-        <p class="muted small">{{ workspace.activeOutlet?.name || 'Belum ada outlet aktif' }}</p>
+        <!-- ✅ FIX: activeOutlet sekarang top-level ComputedRef, auto-unwrap di template -->
+        <p class="muted small">{{ activeOutlet?.name || 'Belum ada outlet aktif' }}</p>
       </div>
     </aside>
 
@@ -80,29 +101,34 @@ watch(() => route.path, async (path) => {
       <header class="topbar">
         <div>
           <p class="eyebrow">Outlet aktif</p>
-          <h2>{{ workspace.activeOutlet?.name || 'Pilih outlet' }}</h2>
-          <p class="muted small">{{ workspace.activeOutlet?.address || 'Alamat outlet belum diatur.' }}</p>
+          <!-- ✅ FIX: activeOutlet auto-unwrap sekarang -->
+          <h2>{{ activeOutlet?.name || 'Pilih outlet' }}</h2>
+          <p class="muted small">{{ activeOutlet?.address || 'Alamat outlet belum diatur.' }}</p>
         </div>
 
         <div class="topbar-actions">
+          <!-- ✅ FIX: outlets sekarang top-level Ref, .length bisa dibaca dengan benar -->
           <select
-            v-if="workspace.outlets.length"
-            :value="workspace.activeOutletId"
+            v-if="outlets?.length"
+            :value="activeOutletId"
             class="input"
             style="min-width: 220px"
-            @change="workspace.switchOutlet(($event.target as HTMLSelectElement).value)"
+            @change="switchOutlet(($event.target as HTMLSelectElement).value)"
           >
-            <option v-for="outlet in workspace.outlets" :key="outlet.id" :value="outlet.id">
+            <option v-for="outlet in outlets" :key="outlet.id" :value="outlet.id">
               {{ outlet.name }}
             </option>
           </select>
-          <button class="btn btn-secondary" @click="workspace.bootstrap(true)">Refresh</button>
-          <button class="btn btn-dark" @click="workspace.signOut">Logout</button>
+          <!-- ✅ FIX: panggil bootstrap() dan signOut() langsung, bukan via workspace. -->
+          <button class="btn btn-secondary" @click="bootstrap(true)">Refresh</button>
+          <button class="btn btn-dark" @click="signOut">Logout</button>
         </div>
       </header>
 
-      <div v-if="workspace.error" class="alert alert-warning" style="margin-bottom: 16px;">
-        {{ workspace.error }}
+      <!-- ✅ FIX: error sekarang top-level Ref, v-if bisa baca nilai string-nya -->
+      <!-- Sebelumnya: workspace.error adalah Ref object → selalu truthy! -->
+      <div v-if="error" class="alert alert-warning" style="margin-bottom: 16px;">
+        {{ error }}
       </div>
 
       <main class="content-shell">
