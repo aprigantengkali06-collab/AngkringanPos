@@ -86,11 +86,11 @@ export const useWorkspace = () => {
         initialized.value = true
         return
       }
-try {
-  await supabase.functions.invoke('bootstrap-user', { body: {} })
-} catch {
-  // best effort only
-}
+
+      try {
+        await supabase.functions.invoke('bootstrap-user', { body: {} })
+      } catch {
+        // best effort only
       }
 
       const [{ data: userData }, profileRes, outletRes] = await Promise.all([
