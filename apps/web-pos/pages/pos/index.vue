@@ -38,7 +38,9 @@ const cart = ref<CartRow[]>([])
 const recentOrders = ref<any[]>([])
 const successMessage = ref('')
 const errorMessage = ref('')
-const debugInfo = ref('')
+
+// ✅ FIX: Hapus debugInfo — tidak diperlukan di production
+// (debug panel yang muncul di screenshot sudah dihapus)
 
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
 const normalizeCategoryName = (menu: MenuRow) => {
@@ -69,6 +71,8 @@ const totalQty = computed(() => cart.value.reduce((sum, item) => sum + item.qty,
 const effectivePaid = computed(() => paidAmount.value == null || Number.isNaN(paidAmount.value) ? subtotal.value : Number(paidAmount.value))
 const changeAmount = computed(() => Math.max(0, effectivePaid.value - subtotal.value))
 const insufficientPayment = computed(() => paymentMethod.value === 'cash' && effectivePaid.value < subtotal.value)
+
+// ✅ FIX: workspace.activeOutletId adalah useState Ref — gunakan .value di dalam script
 const canSubmit = computed(() => workspace.activeOutletId.value && cart.value.length > 0 && !insufficientPayment.value)
 
 const todaySales = computed(() => {
@@ -177,12 +181,7 @@ const submitOrder = async () => {
 }
 
 onMounted(async () => {
-  try {
-    await workspace.bootstrap()
-    debugInfo.value = `profile: ${JSON.stringify(workspace.profile.value)}, outlets: ${JSON.stringify(workspace.outlets.value)}, activeOutletId: ${workspace.activeOutletId.value}, error: ${workspace.error.value}`
-  } catch (e: any) {
-    debugInfo.value = `bootstrap error: ${e?.message}`
-  }
+  await workspace.bootstrap()
   await Promise.all([loadMenus(), loadRecentOrders()])
 })
 
@@ -207,7 +206,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       </div>
     </section>
 
-    <div v-if="debugInfo" class="alert" style="background:#1e293b;color:#94a3b8;font-size:11px;word-break:break-all;margin-bottom:8px;">{{ debugInfo }}</div>
+    <!-- ✅ FIX: Debug panel dihapus dari production view -->
 
     <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
     <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
