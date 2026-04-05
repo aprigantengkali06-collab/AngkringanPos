@@ -70,16 +70,19 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
 <template>
   <div class="page">
-    <section class="section-title">
-      <div>
-        <h1 class="title">Riwayat Transaksi</h1>
-        <p class="subtitle">Data transaksi 100 terakhir dari outlet aktif.</p>
+    <section class="page-hero">
+      <div class="page-hero-top">
+        <div>
+          <p class="eyebrow">Laporan</p>
+          <h1 class="page-hero-title">Riwayat Transaksi</h1>
+        </div>
+        <div class="toolbar page-header-actions">
+          <button class="btn btn-secondary" :disabled="loading" @click="load">
+            {{ loading ? 'Memuat...' : 'Refresh' }}
+          </button>
+        </div>
       </div>
-      <div class="toolbar page-header-actions">
-        <button class="btn btn-secondary" :disabled="loading" @click="load">
-          {{ loading ? 'Memuat...' : 'Refresh' }}
-        </button>
-      </div>
+    </section>
     </section>
 
     <div class="grid grid-4">
