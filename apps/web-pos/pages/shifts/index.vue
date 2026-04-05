@@ -163,13 +163,15 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
 <template>
   <div class="page">
-    <section class="section-title">
-      <div>
-        <h1 class="title">Shift Kasir</h1>
-        <p class="subtitle">Buka shift dengan kas awal, lalu tutup shift menggunakan hitungan aktual agar selisih kas bisa diketahui tanpa mengubah alur kerja kasir yang sudah ada.</p>
-      </div>
-      <div class="toolbar page-header-actions">
-        <button class="btn btn-secondary" :disabled="loading" @click="load">{{ loading ? 'Memuat...' : 'Refresh' }}</button>
+    <section class="page-hero">
+      <div class="page-hero-top">
+        <div>
+          <p class="eyebrow">Operasional</p>
+          <h1 class="page-hero-title">Shift Kasir</h1>
+        </div>
+        <div class="toolbar page-header-actions">
+          <button class="btn btn-secondary" :disabled="loading" @click="load">{{ loading ? 'Memuat...' : 'Refresh' }}</button>
+        </div>
       </div>
     </section>
 
