@@ -11,20 +11,6 @@ export const orderService = {
   async createOrder(payload: Record<string, unknown>) {
     const supabase = useSupabaseClient()
 
-    // Coba edge function dulu, fallback ke RPC kalau gagal apapun alasannya
-    try {
-      const result = await supabase.functions.invoke('create-order', {
-        body: payload
-      })
-
-      if (!result.error && result.data?.ok !== false) {
-        return normalizeCreateOrderResponse(result.data)
-      }
-    } catch {
-      // Edge function tidak bisa dijangkau → ke RPC
-    }
-
-    // Fallback: panggil RPC langsung ke database
     const rpcResult = await supabase.rpc('create_order_pos', { payload })
 
     if (rpcResult.error) throw new Error(rpcResult.error.message || 'Gagal membuat transaksi.')
