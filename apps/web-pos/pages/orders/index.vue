@@ -12,6 +12,7 @@ const selectedOrder = ref<any | null>(null)
 
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
 const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString('id-ID') : '-'
+const shortId = (id: string) => `#${(id || '').slice(-8).toUpperCase()}`
 
 const load = async () => {
   if (!workspace.activeOutletId.value) return
@@ -62,7 +63,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     <section class="section-title">
       <div>
         <h1 class="title">Riwayat Transaksi</h1>
-        <p class="subtitle">Data transaksi sekarang membaca field schema terbaru, jadi nomor order, nominal bayar, dan kembalian tampil konsisten dengan data Supabase.</p>
+        <p class="subtitle">Data transaksi 100 terakhir dari outlet aktif.</p>
       </div>
       <div class="toolbar page-header-actions">
         <button class="btn btn-secondary" :disabled="loading" @click="load">
@@ -89,7 +90,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           <table class="table">
             <thead>
               <tr>
-                <th>No. Order</th>
+                <th>ID Order</th>
                 <th>Pelanggan</th>
                 <th>Tipe</th>
                 <th>Metode</th>
@@ -103,7 +104,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
             <tbody>
               <tr v-for="order in orders" :key="order.id">
                 <td>
-                  <strong>{{ order.order_no }}</strong>
+                  <strong>{{ shortId(order.id) }}</strong>
                   <div class="small muted">{{ order.status }}</div>
                 </td>
                 <td>{{ order.customer_name || 'Umum' }}</td>
@@ -123,7 +124,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           <article v-for="order in orders" :key="order.id" class="management-card compact-card">
             <div class="management-card-top">
               <div>
-                <h3>{{ order.order_no }}</h3>
+                <h3>{{ shortId(order.id) }}</h3>
                 <p class="muted small">{{ order.customer_name || 'Umum' }} · {{ order.payment_method }} · {{ order.order_type }}</p>
               </div>
               <span class="badge" :class="order.status === 'paid' ? 'badge-success' : 'badge-neutral'">{{ order.status }}</span>
@@ -162,7 +163,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       <div class="modal-card stack" @click.stop>
         <div class="section-title">
           <div>
-            <h2 style="margin:0">{{ selectedOrder.order_no }}</h2>
+            <h2 style="margin:0">{{ shortId(selectedOrder.id) }}</h2>
             <p class="subtitle">{{ selectedOrder.customer_name || 'Umum' }} · {{ selectedOrder.payment_method }} · {{ formatDateTime(selectedOrder.paid_at || selectedOrder.created_at) }}</p>
           </div>
           <button class="btn btn-secondary" @click="selectedOrder = null">Tutup</button>
