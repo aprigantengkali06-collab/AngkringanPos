@@ -161,8 +161,11 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 })
 </script>
 
+
 <template>
   <div class="page">
+
+    <!-- HEADER -->
     <section class="page-hero">
       <div class="page-hero-top">
         <div>
@@ -170,12 +173,15 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           <h1 class="page-hero-title">Shift Kasir</h1>
         </div>
         <div class="toolbar page-header-actions">
-          <button class="btn btn-secondary" :disabled="loading" @click="load">{{ loading ? 'Memuat...' : 'Refresh' }}</button>
+          <button class="btn btn-secondary" :disabled="loading" @click="load">
+            {{ loading ? 'Memuat...' : 'Refresh' }}
+          </button>
         </div>
       </div>
     </section>
 
-    <div class="grid grid-4">
+    <!-- KPI 2x2 -->
+    <div class="shift-kpi-grid">
       <article class="kpi-card">
         <h3>Shift aktif</h3>
         <div class="value">{{ activeShift ? '1' : '0' }}</div>
@@ -184,50 +190,46 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       <article class="kpi-card">
         <h3>Total shift</h3>
         <div class="value">{{ totalShifts }}</div>
-        <div class="hint">Riwayat 50 shift terakhir</div>
+        <div class="hint">Riwayat 50 terakhir</div>
       </article>
       <article class="kpi-card">
-        <h3>Shift ditutup</h3>
+        <h3>Ditutup</h3>
         <div class="value">{{ closedShifts }}</div>
         <div class="hint">Sudah direkonsiliasi</div>
       </article>
       <article class="kpi-card">
-        <h3>Rata-rata selisih</h3>
+        <h3>Rata selisih</h3>
         <div class="value">{{ formatCurrency(averageDifference) }}</div>
-        <div class="hint">Total kas awal: {{ formatCurrency(totalOpeningCash) }}</div>
+        <div class="hint">Kas awal: {{ formatCurrency(totalOpeningCash) }}</div>
       </article>
     </div>
 
     <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
     <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
+    <!-- KONTEN UTAMA: Stack di mobile, 2 kolom di desktop -->
     <div class="shift-panels">
+
+      <!-- SHIFT AKTIF -->
       <section class="card stack">
-        <div class="section-title" style="padding-bottom:14px;">
-          <h2 style="margin:0; font-size:17px;">Shift aktif</h2>
+        <div class="shift-section-head">
+          <h2 class="shift-section-title">Shift aktif</h2>
+          <span v-if="activeShift" class="badge badge-success">● Berjalan</span>
+          <span v-else class="badge">Tidak ada</span>
         </div>
 
+        <!-- Ada shift aktif: tampilkan info + form tutup -->
         <div v-if="activeShift" class="stack">
-          <article class="management-card">
-            <div class="management-card-top">
-              <div>
-                <h3>Shift sedang berjalan</h3>
-                <p class="management-card-description">Dibuka pada {{ formatDateTime(activeShift.opened_at) }}</p>
-              </div>
-              <span class="badge badge-soft">{{ activeShift.status }}</span>
+          <div class="shift-info-bar">
+            <div class="shift-info-item">
+              <span class="summary-label">Dibuka</span>
+              <strong>{{ formatDateTime(activeShift.opened_at) }}</strong>
             </div>
-
-            <div class="management-card-stats detail-grid-2">
-              <div>
-                <span class="muted small">Kas awal</span>
-                <strong>{{ formatCurrency(activeShift.opening_cash) }}</strong>
-              </div>
-              <div>
-                <span class="muted small">Catatan</span>
-                <strong>{{ activeShift.notes || '-' }}</strong>
-              </div>
+            <div class="shift-info-item">
+              <span class="summary-label">Kas awal</span>
+              <strong>{{ formatCurrency(activeShift.opening_cash) }}</strong>
             </div>
-          </article>
+          </div>
 
           <div class="stack" style="gap:8px;">
             <label class="field-label">Kas aktual saat tutup shift</label>
@@ -236,46 +238,42 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
           <div class="stack" style="gap:8px;">
             <label class="field-label">Catatan penutupan</label>
-            <textarea v-model="closeNotes" class="textarea" placeholder="Catatan selisih, setor bank, kas kurang, atau informasi lain"></textarea>
+            <textarea v-model="closeNotes" class="textarea" placeholder="Catatan selisih, setor bank, kas kurang..." />
           </div>
 
-          <div class="toolbar form-actions-row">
-            <button class="btn btn-danger" :disabled="closing" @click="closeShift">{{ closing ? 'Menutup shift...' : 'Tutup shift' }}</button>
-          </div>
+          <button class="btn btn-danger" :disabled="closing" @click="closeShift">
+            {{ closing ? 'Menutup shift...' : 'Tutup shift' }}
+          </button>
         </div>
 
+        <!-- Tidak ada shift: form buka shift -->
         <div v-else class="stack">
-          <div class="empty-state">Belum ada shift yang sedang berjalan.</div>
+          <p class="muted small">Belum ada shift berjalan. Buka shift untuk mulai mencatat transaksi.</p>
           <div class="stack" style="gap:8px;">
             <label class="field-label">Kas awal</label>
             <input v-model.number="openCash" class="input" type="number" min="0" placeholder="Contoh: 100000" />
           </div>
-          <div class="toolbar form-actions-row">
-            <button class="btn btn-primary" :disabled="opening" @click="openShift">{{ opening ? 'Membuka shift...' : 'Buka shift baru' }}</button>
-          </div>
+          <button class="btn btn-primary" :disabled="opening" @click="openShift">
+            {{ opening ? 'Membuka shift...' : 'Buka shift baru' }}
+          </button>
         </div>
       </section>
 
+      <!-- RIWAYAT SHIFT -->
       <section class="card stack">
-        <div class="section-title" style="padding-bottom:14px;">
-          <h2 style="margin:0; font-size:17px;">Riwayat shift</h2>
-        </div>
+        <h2 class="shift-section-title">Riwayat shift</h2>
 
         <div v-if="loading" class="empty-state">Memuat shift...</div>
         <div v-else-if="!shifts.length" class="empty-state">Belum ada data shift.</div>
 
         <template v-else>
+          <!-- Desktop: tabel -->
           <div class="table-wrap desktop-table-only">
             <table class="table">
               <thead>
                 <tr>
-                  <th>Status</th>
-                  <th>Dibuka</th>
-                  <th>Ditutup</th>
-                  <th>Kas awal</th>
-                  <th>Kas ekspektasi</th>
-                  <th>Kas aktual</th>
-                  <th>Selisih</th>
+                  <th>Status</th><th>Dibuka</th><th>Ditutup</th>
+                  <th>Kas awal</th><th>Ekspektasi</th><th>Aktual</th><th>Selisih</th>
                 </tr>
               </thead>
               <tbody>
@@ -292,44 +290,135 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
             </table>
           </div>
 
-          <div class="management-card-list mobile-card-only">
-            <article v-for="shift in shifts" :key="shift.id" class="management-card compact-card">
-              <div class="management-card-top">
+          <!-- Mobile: list kompak -->
+          <div class="shift-history-list mobile-card-only">
+            <article v-for="shift in shifts" :key="shift.id" class="shift-row">
+              <div class="shift-row-top">
                 <div>
-                  <h3>{{ shift.status === 'open' ? 'Shift aktif' : 'Shift selesai' }}</h3>
-                  <p class="management-card-description">Dibuka {{ formatDateTime(shift.opened_at) }}</p>
+                  <strong class="shift-row-label">{{ shift.status === 'open' ? 'Shift aktif' : 'Shift selesai' }}</strong>
+                  <p class="muted small" style="margin:2px 0 0;">{{ formatDateTime(shift.opened_at) }}</p>
                 </div>
                 <span class="badge" :class="shift.status === 'open' ? 'badge-soft' : 'badge-success'">{{ shift.status }}</span>
               </div>
 
-              <div class="management-card-stats detail-grid-2">
-                <div>
-                  <span class="muted small">Kas awal</span>
+              <div class="shift-row-stats">
+                <div class="shift-stat">
+                  <span class="summary-label">Kas awal</span>
                   <strong>{{ formatCurrency(shift.opening_cash) }}</strong>
                 </div>
-                <div>
-                  <span class="muted small">Kas ekspektasi</span>
+                <div class="shift-stat">
+                  <span class="summary-label">Ekspektasi</span>
                   <strong>{{ formatCurrency(shift.expected_cash) }}</strong>
                 </div>
-                <div>
-                  <span class="muted small">Kas aktual</span>
+                <div class="shift-stat">
+                  <span class="summary-label">Aktual</span>
                   <strong>{{ formatCurrency(shift.actual_cash) }}</strong>
                 </div>
-                <div>
-                  <span class="muted small">Selisih</span>
+                <div class="shift-stat">
+                  <span class="summary-label">Selisih</span>
                   <strong>{{ formatCurrency(shift.cash_difference) }}</strong>
                 </div>
               </div>
 
-              <div class="stack" style="gap:6px;">
-                <span class="muted small">Ditutup</span>
-                <strong>{{ formatDateTime(shift.closed_at) }}</strong>
-                <span class="muted small">Catatan: {{ shift.notes || '-' }}</span>
-              </div>
+              <p v-if="shift.closed_at" class="muted small" style="margin-top:4px;">
+                Ditutup: {{ formatDateTime(shift.closed_at) }}
+              </p>
             </article>
           </div>
         </template>
       </section>
+
     </div>
   </div>
 </template>
+
+<style scoped>
+/* KPI grid: 2x2 di mobile, 4 kolom di desktop */
+.shift-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (min-width: 768px) {
+  .shift-kpi-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Panels: 1 kolom di mobile, 2 kolom di desktop */
+.shift-panels {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .shift-panels {
+    grid-template-columns: repeat(2, 1fr);
+    align-items: start;
+  }
+}
+
+/* Section header */
+.shift-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.shift-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  flex: 1;
+}
+
+/* Info bar (dibuka + kas awal) */
+.shift-info-bar {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  background: var(--bg-soft);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+}
+.shift-info-item {
+  display: grid;
+  gap: 2px;
+}
+.shift-info-item strong {
+  font-size: 13px;
+}
+
+/* Riwayat list */
+.shift-history-list {
+  display: grid;
+  gap: 10px;
+}
+.shift-row {
+  padding: 14px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-soft);
+  display: grid;
+  gap: 10px;
+}
+.shift-row-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.shift-row-label {
+  font-size: 14px;
+}
+.shift-row-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.shift-stat {
+  display: grid;
+  gap: 2px;
+}
+.shift-stat strong {
+  font-size: 13px;
+}
+</style>
