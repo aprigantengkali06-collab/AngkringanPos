@@ -55,6 +55,7 @@ const showSuccessSheet = ref(false)
 const lastOrder = ref<any | null>(null)
 
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
+const shortId = (id: string) => `#${(id || '').slice(-8).toUpperCase()}`
 
 const normalizeCategoryName = (menu: MenuRow) => {
   const categoryValue = Array.isArray(menu.categories) ? menu.categories[0] : menu.categories
@@ -124,7 +125,11 @@ const loadMenus = async () => {
 
 const loadRecentOrders = async () => {
   if (!workspace.activeOutletId.value) return
-  recentOrders.value = await orderService.listLatest(workspace.activeOutletId.value, 8)
+  try {
+    recentOrders.value = await orderService.listLatest(workspace.activeOutletId.value, 8)
+  } catch {
+    // Recent orders gagal tidak perlu blok UI
+  }
 }
 
 const addMenu = (menu: MenuRow) => {
@@ -260,7 +265,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       </div>
     </section>
 
-    <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+    <div v-if="errorMessage && !showCartSheet" class="alert alert-danger">{{ errorMessage }}</div>
 
     <div class="pos-layout">
       <section class="card stack pos-catalogue-card">
@@ -320,6 +325,9 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           </div>
           <button class="btn btn-secondary mobile-only" @click="showCartSheet = false">Tutup</button>
         </div>
+
+        <!-- Error ditampilkan di dalam cart sheet agar terlihat di mobile -->
+        <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
         <div class="stack" style="gap: 10px;">
           <label class="field-label">Pelanggan</label>
@@ -438,7 +446,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       <div v-else class="recent-order-list">
         <article v-for="order in recentOrders" :key="order.id" class="recent-order-item">
           <div>
-            <strong>{{ order.order_no }}</strong>
+            <strong>{{ shortId(order.id) }}</strong>
             <p class="muted small">{{ order.customer_name || 'Umum' }} · {{ order.payment_method }} · {{ new Date(order.created_at).toLocaleString('id-ID') }}</p>
           </div>
           <strong>{{ formatCurrency(order.total) }}</strong>
@@ -459,7 +467,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       <div class="modal-card success-state-card" @click.stop>
         <div class="success-mark">✓</div>
         <h2>Transaksi Sukses!</h2>
-        <p class="subtitle">{{ lastOrder.order_no }} berhasil disimpan.</p>
+        <p class="subtitle">Transaksi berhasil disimpan.</p>
 
         <div class="success-pills">
           <span class="chip active">Metode: {{ lastOrder.payment_method }}</span>
