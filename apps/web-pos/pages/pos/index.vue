@@ -243,15 +243,16 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
 <template>
   <div class="page page-pos">
-    <section class="pos-hero card glass">
-      <div>
-        <p class="eyebrow">Kasir mobile-first</p>
-        <h1 class="title">Kasir</h1>
-        <p class="subtitle">Tampilan dipadatkan untuk HP: pilih produk cepat, lihat keranjang jelas, lalu bayar tanpa bolak-balik layar.</p>
+    <section class="pos-hero card">
+      <div class="pos-hero-top">
+        <div>
+          <p class="eyebrow">Kasir mobile-first</p>
+          <h1 class="pos-hero-title">Kasir</h1>
+        </div>
       </div>
 
       <div class="pos-summary-grid">
-        <article class="summary-chip-card active">
+        <article class="summary-chip-card" :class="{ active: totalQty > 0 }">
           <span class="summary-label">Keranjang</span>
           <strong>{{ totalQty }} item</strong>
         </article>
@@ -260,8 +261,8 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           <strong>{{ formatCurrency(todayRevenue) }}</strong>
         </article>
         <article class="summary-chip-card">
-          <span class="summary-label">Transaksi hari ini</span>
-          <strong>{{ todaySales.length }}</strong>
+          <span class="summary-label">Transaksi</span>
+          <strong>{{ todaySales.length }}x</strong>
         </article>
       </div>
     </section>
