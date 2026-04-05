@@ -857,6 +857,20 @@ img { display: block; max-width: 100%; }
   color: var(--text);
 }
 
+/* ===== SHIFT PANELS ===== */
+.shift-panels {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 600px) {
+  .shift-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
 .pos-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
