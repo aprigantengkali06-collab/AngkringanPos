@@ -1,82 +1,52 @@
+const shouldFallbackToRpc = (message: string) => {
+  const normalized = String(message || '').toLowerCase()
+  return [
+    'edge function',
+    'failed to send a request',
+    'fetch failed',
+    'failed to fetch',
+    'functionsfetcherror',
+    'networkerror',
+    'non-2xx status code',
+    'cors'
+  ].some((keyword) => normalized.includes(keyword))
+}
+
+const normalizeCreateOrderResponse = (payload: any) => ({
+  ok: payload?.ok !== false,
+  order_id: payload?.order_id,
+  order_no: payload?.order_no,
+  total: Number(payload?.total || 0),
+  change_amount: Number(payload?.change_amount || 0),
+  paid_at: payload?.paid_at || new Date().toISOString()
+})
+
 export const orderService = {
   async createOrder(payload: Record<string, unknown>) {
     const supabase = useSupabaseClient()
 
-    // Ambil shift aktif
-    const { data: shifts } = await supabase
-      .from('shifts')
-      .select('id')
-      .eq('outlet_id', payload.outlet_id)
-      .eq('status', 'open')
-      .limit(1)
-
-    const shiftId = shifts?.[0]?.id || null
-
-    // Generate nomor order
-    const { data: orderCount } = await supabase
-      .from('orders')
-      .select('id', { count: 'exact', head: true })
-      .eq('outlet_id', payload.outlet_id)
-
-    const date = new Date()
-    const dateStr = date.toLocaleDateString('id-ID', {
-      year: '2-digit', month: '2-digit', day: '2-digit',
-      timeZone: 'Asia/Jakarta'
-    }).replace(/\//g, '')
-    const count = String((orderCount as any) + 1 || 1).padStart(4, '0')
-    const orderNumber = `ORD-${dateStr}-${count}`
-
-    const items = payload.items as any[]
-    const subtotal = items.reduce((sum: number, item: any) => sum + item.subtotal, 0)
-    const discount = Number(payload.discount || 0)
-    const total = subtotal - discount
-    const paidAmount = Number(payload.paid_amount || subtotal)
-    const change = paidAmount - total
-
-    // Insert order
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        outlet_id: payload.outlet_id,
-        shift_id: shiftId,
-        order_number: orderNumber,
-        payment_method: payload.payment_method || 'cash',
-        subtotal,
-        discount,
-        total,
-        cash_received: paidAmount,
-        cash_change: change,
-        notes: payload.notes || null,
-        status: 'paid'
+    try {
+      const result = await supabase.functions.invoke('create-order', {
+        body: payload
       })
-      .select('id, order_number, total')
-      .single()
 
-    if (orderError) throw new Error(orderError.message)
+      if (result.error) throw result.error
+      if (result.data?.ok === false) throw new Error(result.data.error || 'Gagal membuat transaksi.')
 
-    // Insert items
-    const orderItems = items.map((item: any) => ({
-      order_id: order.id,
-      product_id: item.menu_id || item.product_id || null,
-      product_name: item.item_name || item.product_name || item.name,
-      product_price: item.unit_price || item.product_price || item.price,
-      quantity: item.qty || item.quantity || 1,
-      subtotal: item.subtotal,
-      notes: item.notes || null
-    }))
+      return normalizeCreateOrderResponse(result.data)
+    } catch (invokeError: any) {
+      if (!shouldFallbackToRpc(invokeError?.message || '')) {
+        throw invokeError
+      }
 
-    const { error: itemsError } = await supabase
-      .from('order_items')
-      .insert(orderItems)
+      const rpcResult = await supabase.rpc('create_order_pos', {
+        payload
+      })
 
-    if (itemsError) throw new Error(itemsError.message)
+      if (rpcResult.error) throw rpcResult.error
+      if (rpcResult.data?.ok === false) throw new Error(rpcResult.data.error || 'Gagal membuat transaksi.')
 
-    return {
-      ok: true,
-      order_id: order.id,
-      order_number: order.order_number,
-      total: order.total,
-      change
+      return normalizeCreateOrderResponse(rpcResult.data)
     }
   },
 
@@ -84,8 +54,9 @@ export const orderService = {
     const supabase = useSupabaseClient()
     const { data, error } = await supabase
       .from('orders')
-      .select('id, outlet_id, order_number, status, total, subtotal, discount, payment_method, cash_received, cash_change, notes, created_at')
+      .select('id, outlet_id, order_no, customer_name, order_type, status, total, subtotal, discount_amount, payment_method, paid_amount, change_amount, notes, created_at, paid_at')
       .eq('outlet_id', outletId)
+      .order('paid_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -97,7 +68,7 @@ export const orderService = {
     const supabase = useSupabaseClient()
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select('id, order_no, customer_name, order_type, payment_method, status, subtotal, discount_amount, total, paid_amount, change_amount, notes, created_at, paid_at, order_items(id, item_name, qty, unit_price, subtotal, notes)')
       .eq('id', orderId)
       .single()
 
