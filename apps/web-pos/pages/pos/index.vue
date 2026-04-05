@@ -53,6 +53,7 @@ const errorMessage = ref('')
 const showCartSheet = ref(false)
 const showSuccessSheet = ref(false)
 const lastOrder = ref<any | null>(null)
+const viewMode = ref<'list' | 'grid'>('list')
 
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
 const shortId = (id: string) => `#${(id || '').slice(-8).toUpperCase()}`
@@ -274,6 +275,27 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
             <span class="search-icon">⌕</span>
             <input v-model="search" class="input search-field" placeholder="Cari menu, kategori, atau deskripsi..." />
           </div>
+
+          <!-- Toggle List / Grid -->
+          <div class="view-toggle">
+            <button
+              class="view-toggle-btn"
+              :class="{ active: viewMode === 'list' }"
+              @click="viewMode = 'list'"
+              title="Tampilan list"
+            >
+              ☰
+            </button>
+            <button
+              class="view-toggle-btn"
+              :class="{ active: viewMode === 'grid' }"
+              @click="viewMode = 'grid'"
+              title="Tampilan grid"
+            >
+              ⊞
+            </button>
+          </div>
+
           <button class="btn btn-secondary" @click="loadMenus">Refresh menu</button>
         </div>
 
@@ -292,8 +314,9 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
         <div v-if="loading" class="empty-state">Memuat menu outlet...</div>
         <div v-else-if="!filteredMenus.length" class="empty-state">Menu tidak ditemukan. Coba kata kunci atau kategori lain.</div>
 
-        <div v-else class="product-list">
-          <article v-for="menu in filteredMenus" :key="menu.id" class="product-row">
+        <!-- LIST VIEW -->
+        <div v-else-if="viewMode === 'list'" class="product-list product-list-spaced">
+          <article v-for="menu in filteredMenus" :key="menu.id" class="product-row product-row-card">
             <div class="product-avatar">{{ getInitials(menu.name) }}</div>
 
             <div class="product-main">
@@ -302,15 +325,32 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
                 <strong class="product-price">{{ formatCurrency(menu.price) }}</strong>
               </div>
 
-              <p class="product-description">{{ menu.description || 'Siap dijual di kasir.' }}</p>
-
-              <div class="product-meta-row">
+              <div class="product-tags-row">
                 <span class="catalogue-badge">{{ normalizeCategoryName(menu) }}</span>
-                <span class="muted small">Modal {{ formatCurrency(menu.cost_price) }}</span>
+                <span class="modal-badge">Modal {{ formatCurrency(menu.cost_price) }}</span>
+                <span v-if="!menu.description" class="siap-badge">✓ Siap dijual</span>
               </div>
+
+              <p v-if="menu.description" class="product-description">{{ menu.description }}</p>
             </div>
 
             <button class="btn btn-primary product-action" @click="addMenu(menu)">Tambah</button>
+          </article>
+        </div>
+
+        <!-- GRID VIEW -->
+        <div v-else class="product-grid">
+          <article v-for="menu in filteredMenus" :key="menu.id" class="product-grid-card" @click="addMenu(menu)">
+            <div class="product-grid-avatar">{{ getInitials(menu.name) }}</div>
+            <div class="product-grid-body">
+              <h3 class="product-grid-name">{{ menu.name }}</h3>
+              <span class="catalogue-badge catalogue-badge-sm">{{ normalizeCategoryName(menu) }}</span>
+              <div class="product-grid-footer">
+                <strong class="product-price-grid">{{ formatCurrency(menu.price) }}</strong>
+                <span class="modal-badge-sm">Modal {{ formatCurrency(menu.cost_price) }}</span>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-grid-add" @click.stop="addMenu(menu)">+ Tambah</button>
           </article>
         </div>
       </section>
@@ -326,7 +366,6 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           <button class="btn btn-secondary mobile-only" @click="showCartSheet = false">Tutup</button>
         </div>
 
-        <!-- Error ditampilkan di dalam cart sheet agar terlihat di mobile -->
         <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
         <div class="stack" style="gap: 10px;">
@@ -487,3 +526,154 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* === JARAK ANTAR CARD LIST === */
+.product-list-spaced {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.product-row-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+/* === TAGS ROW: Kategori · Modal · Siap dijual === */
+.product-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.modal-badge {
+  font-size: 11px;
+  color: #666;
+  background: #f5f5f5;
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+
+.siap-badge {
+  font-size: 11px;
+  color: #16a34a;
+  background: #f0fdf4;
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-weight: 500;
+}
+
+/* === VIEW TOGGLE === */
+.view-toggle {
+  display: flex;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.view-toggle-btn {
+  background: #fff;
+  border: none;
+  padding: 6px 12px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #888;
+  transition: all 0.15s;
+}
+
+.view-toggle-btn.active {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+/* === GRID VIEW === */
+.product-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.product-grid-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+
+.product-grid-card:active {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.product-grid-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.product-grid-name {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.product-grid-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.catalogue-badge-sm {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.product-grid-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.product-price-grid {
+  font-size: 14px;
+  color: #d97706;
+  font-weight: 700;
+}
+
+.modal-badge-sm {
+  font-size: 10px;
+  color: #888;
+}
+
+.btn-grid-add {
+  width: 100%;
+  padding: 8px;
+  font-size: 12px;
+  border-radius: 8px;
+  margin-top: auto;
+}
+</style>
