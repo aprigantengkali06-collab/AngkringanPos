@@ -201,11 +201,10 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
     <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
-    <div class="grid grid-2">
+    <div class="shift-panels">
       <section class="card stack">
-        <div>
-          <h2 style="margin:0">Shift aktif</h2>
-          <p class="subtitle">Buat tampilan buka/tutup shift lebih nyaman di mobile, tapi proses dan hitungannya tetap sama.</p>
+        <div class="section-title" style="padding-bottom:14px;">
+          <h2 style="margin:0; font-size:17px;">Shift aktif</h2>
         </div>
 
         <div v-if="activeShift" class="stack">
@@ -258,9 +257,8 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       </section>
 
       <section class="card stack">
-        <div>
-          <h2 style="margin:0">Riwayat shift</h2>
-          <p class="subtitle">Tabel desktop tetap tersedia, sedangkan mode mobile memakai kartu agar data penting lebih cepat terbaca.</p>
+        <div class="section-title" style="padding-bottom:14px;">
+          <h2 style="margin:0; font-size:17px;">Riwayat shift</h2>
         </div>
 
         <div v-if="loading" class="empty-state">Memuat shift...</div>
