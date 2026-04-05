@@ -1,17 +1,3 @@
-const shouldFallbackToRpc = (message: string) => {
-  const normalized = String(message || '').toLowerCase()
-  return [
-    'edge function',
-    'failed to send a request',
-    'fetch failed',
-    'failed to fetch',
-    'functionsfetcherror',
-    'networkerror',
-    'non-2xx status code',
-    'cors'
-  ].some((keyword) => normalized.includes(keyword))
-}
-
 const normalizeCreateOrderResponse = (payload: any) => ({
   ok: payload?.ok !== false,
   order_id: payload?.order_id,
@@ -24,29 +10,31 @@ export const orderService = {
   async createOrder(payload: Record<string, unknown>) {
     const supabase = useSupabaseClient()
 
+    // Coba edge function dulu, fallback ke RPC kalau gagal apapun alasannya
     try {
       const result = await supabase.functions.invoke('create-order', {
         body: payload
       })
 
-      if (result.error) throw result.error
-      if (result.data?.ok === false) throw new Error(result.data.error || 'Gagal membuat transaksi.')
-
-      return normalizeCreateOrderResponse(result.data)
-    } catch (invokeError: any) {
-      if (!shouldFallbackToRpc(invokeError?.message || '')) {
-        throw invokeError
+      // Kalau sukses dan data ok, pakai hasilnya
+      if (!result.error && result.data?.ok !== false) {
+        return normalizeCreateOrderResponse(result.data)
       }
 
-      const rpcResult = await supabase.rpc('create_order_pos', {
-        payload
-      })
-
-      if (rpcResult.error) throw rpcResult.error
-      if (rpcResult.data?.ok === false) throw new Error(rpcResult.data.error || 'Gagal membuat transaksi.')
-
-      return normalizeCreateOrderResponse(rpcResult.data)
+      // Edge function ada tapi return error / ok: false → langsung ke RPC
+    } catch {
+      // Edge function tidak bisa dijangkau → ke RPC
     }
+
+    // Fallback: panggil RPC langsung ke database
+    const rpcResult = await supabase.rpc('create_order_pos', {
+      payload
+    })
+
+    if (rpcResult.error) throw new Error(rpcResult.error.message || 'Gagal membuat transaksi.')
+    if (rpcResult.data?.ok === false) throw new Error(rpcResult.data.error || 'Gagal membuat transaksi.')
+
+    return normalizeCreateOrderResponse(rpcResult.data)
   },
 
   async listLatest(outletId: string, limit = 100) {
