@@ -15,7 +15,6 @@ const shouldFallbackToRpc = (message: string) => {
 const normalizeCreateOrderResponse = (payload: any) => ({
   ok: payload?.ok !== false,
   order_id: payload?.order_id,
-  order_no: payload?.order_no,
   total: Number(payload?.total || 0),
   change_amount: Number(payload?.change_amount || 0),
   paid_at: payload?.paid_at || new Date().toISOString()
@@ -54,7 +53,7 @@ export const orderService = {
     const supabase = useSupabaseClient()
     const { data, error } = await supabase
       .from('orders')
-      .select('id, outlet_id, order_no, customer_name, order_type, status, total, subtotal, discount_amount, payment_method, paid_amount, change_amount, notes, created_at, paid_at')
+      .select('id, outlet_id, customer_name, order_type, status, total, subtotal, discount_amount, payment_method, paid_amount, change_amount, notes, created_at, paid_at')
       .eq('outlet_id', outletId)
       .order('paid_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
@@ -68,7 +67,7 @@ export const orderService = {
     const supabase = useSupabaseClient()
     const { data, error } = await supabase
       .from('orders')
-      .select('id, order_no, customer_name, order_type, payment_method, status, subtotal, discount_amount, total, paid_amount, change_amount, notes, created_at, paid_at, order_items(id, item_name, qty, unit_price, subtotal, notes)')
+      .select('id, customer_name, order_type, payment_method, status, subtotal, discount_amount, total, paid_amount, change_amount, notes, created_at, paid_at, order_items(id, item_name, qty, unit_price, subtotal, notes)')
       .eq('id', orderId)
       .single()
 
