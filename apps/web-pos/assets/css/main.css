@@ -818,6 +818,26 @@ img { display: block; max-width: 100%; }
   box-shadow: var(--shadow);
 }
 
+/* ===== PAGE HERO HEADER (Produk, Kategori, Shift, Transaksi) ===== */
+.page-hero {
+  margin-bottom: 4px;
+}
+
+.page-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-hero-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 2px 0 0;
+  color: var(--text);
+}
+
 /* ===== POS HERO HEADER ===== */
 .pos-hero {
   display: grid;
