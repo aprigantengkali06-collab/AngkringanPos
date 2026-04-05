@@ -3,6 +3,7 @@ definePageMeta({ middleware: ['auth'] })
 
 const supabase = useSupabaseClient()
 const workspace = useWorkspace()
+const { activeOutlet } = workspace
 
 const form = reactive({
   brand_name: '',
@@ -111,7 +112,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
         <div :style="{ borderRadius: '22px', padding: '22px', background: `linear-gradient(180deg, ${form.primary_color}22 0%, #ffffff 100%)`, border: `1px solid ${form.primary_color}44` }">
           <div style="display:grid;gap:8px;">
             <strong :style="{ fontSize: '24px', color: form.secondary_color }">{{ form.brand_name || 'Nama Brand' }}</strong>
-            <span class="muted">Outlet {{ workspace.activeOutlet?.name || 'aktif' }}</span>
+            <span class="muted">Outlet {{ activeOutlet?.name || 'aktif' }}</span>
             <p :style="{ color: form.secondary_color, whiteSpace: 'pre-line' }">{{ form.receipt_footer }}</p>
             <span class="muted">WhatsApp: {{ form.whatsapp_number || '-' }}</span>
             <span class="muted">Instagram: {{ form.instagram_url || '-' }}</span>
