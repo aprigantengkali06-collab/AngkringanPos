@@ -4,23 +4,40 @@ definePageMeta({ middleware: ['auth'] })
 const supabase = useSupabaseClient()
 const workspace = useWorkspace()
 
+interface ShiftRow {
+  id: string
+  outlet_id: string
+  opened_by: string
+  closed_by: string | null
+  opened_at: string
+  closed_at: string | null
+  opening_cash: number
+  expected_cash: number | null
+  actual_cash: number | null
+  cash_difference: number | null
+  status: 'open' | 'closed'
+  notes: string | null
+}
+
 const loading = ref(false)
 const opening = ref(false)
 const closing = ref(false)
-const shifts = ref<any[]>([])
-const activeShift = ref<any | null>(null)
+const shifts = ref<ShiftRow[]>([])
+const activeShift = ref<ShiftRow | null>(null)
 const errorMessage = ref('')
 const successMessage = ref('')
 const openCash = ref(0)
 const closeCash = ref<number | null>(null)
 const closeNotes = ref('')
 
-const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
+const formatCurrency = (value: number | null | undefined) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
+const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString('id-ID') : '-'
 
 const load = async () => {
   if (!workspace.activeOutletId.value) return
   loading.value = true
   errorMessage.value = ''
+
   try {
     const { data, error } = await supabase
       .from('shifts')
@@ -30,7 +47,7 @@ const load = async () => {
       .limit(50)
 
     if (error) throw error
-    shifts.value = data || []
+    shifts.value = (data || []) as ShiftRow[]
     activeShift.value = shifts.value.find((item) => item.status === 'open') || null
   } catch (error: any) {
     errorMessage.value = error?.message || 'Gagal memuat data shift.'
@@ -44,6 +61,7 @@ const openShift = async () => {
   opening.value = true
   errorMessage.value = ''
   successMessage.value = ''
+
   try {
     const { error } = await supabase.from('shifts').insert({
       outlet_id: workspace.activeOutletId.value,
@@ -123,6 +141,15 @@ const closeShift = async () => {
   }
 }
 
+const totalShifts = computed(() => shifts.value.length)
+const closedShifts = computed(() => shifts.value.filter((item) => item.status === 'closed').length)
+const totalOpeningCash = computed(() => shifts.value.reduce((sum, item) => sum + Number(item.opening_cash || 0), 0))
+const averageDifference = computed(() => {
+  const closed = shifts.value.filter((item) => item.status === 'closed')
+  if (!closed.length) return 0
+  return closed.reduce((sum, item) => sum + Number(item.cash_difference || 0), 0) / closed.length
+})
+
 onMounted(async () => {
   await workspace.bootstrap()
   await load()
@@ -139,9 +166,35 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     <section class="section-title">
       <div>
         <h1 class="title">Shift Kasir</h1>
-        <p class="subtitle">Buka shift dengan kas awal, lalu tutup shift menggunakan hitungan aktual agar selisih kas bisa diketahui.</p>
+        <p class="subtitle">Buka shift dengan kas awal, lalu tutup shift menggunakan hitungan aktual agar selisih kas bisa diketahui tanpa mengubah alur kerja kasir yang sudah ada.</p>
+      </div>
+      <div class="toolbar page-header-actions">
+        <button class="btn btn-secondary" :disabled="loading" @click="load">{{ loading ? 'Memuat...' : 'Refresh' }}</button>
       </div>
     </section>
+
+    <div class="grid grid-4">
+      <article class="kpi-card">
+        <h3>Shift aktif</h3>
+        <div class="value">{{ activeShift ? '1' : '0' }}</div>
+        <div class="hint">Status outlet saat ini</div>
+      </article>
+      <article class="kpi-card">
+        <h3>Total shift</h3>
+        <div class="value">{{ totalShifts }}</div>
+        <div class="hint">Riwayat 50 shift terakhir</div>
+      </article>
+      <article class="kpi-card">
+        <h3>Shift ditutup</h3>
+        <div class="value">{{ closedShifts }}</div>
+        <div class="hint">Sudah direkonsiliasi</div>
+      </article>
+      <article class="kpi-card">
+        <h3>Rata-rata selisih</h3>
+        <div class="value">{{ formatCurrency(averageDifference) }}</div>
+        <div class="hint">Total kas awal: {{ formatCurrency(totalOpeningCash) }}</div>
+      </article>
+    </div>
 
     <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
     <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
@@ -150,55 +203,132 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       <section class="card stack">
         <div>
           <h2 style="margin:0">Shift aktif</h2>
-          <p class="subtitle">Jika belum ada shift, buka dulu sebelum transaksi ramai berjalan.</p>
+          <p class="subtitle">Buat tampilan buka/tutup shift lebih nyaman di mobile, tapi proses dan hitungannya tetap sama.</p>
         </div>
 
         <div v-if="activeShift" class="stack">
-          <div class="kpi-card"><h3>Kas awal</h3><div class="value">{{ formatCurrency(activeShift.opening_cash) }}</div><div class="hint">Dibuka pada {{ new Date(activeShift.opened_at).toLocaleString('id-ID') }}</div></div>
-          <div class="stack" style="gap:8px;"><label class="field-label">Kas aktual saat tutup shift</label><input v-model.number="closeCash" class="input" type="number" min="0" /></div>
-          <div class="stack" style="gap:8px;"><label class="field-label">Catatan penutupan</label><textarea v-model="closeNotes" class="textarea" placeholder="Catatan selisih, setor bank, dll."></textarea></div>
-          <button class="btn btn-danger" :disabled="closing" @click="closeShift">{{ closing ? 'Menutup shift...' : 'Tutup shift' }}</button>
+          <article class="management-card">
+            <div class="management-card-top">
+              <div>
+                <h3>Shift sedang berjalan</h3>
+                <p class="management-card-description">Dibuka pada {{ formatDateTime(activeShift.opened_at) }}</p>
+              </div>
+              <span class="badge badge-soft">{{ activeShift.status }}</span>
+            </div>
+
+            <div class="management-card-stats detail-grid-2">
+              <div>
+                <span class="muted small">Kas awal</span>
+                <strong>{{ formatCurrency(activeShift.opening_cash) }}</strong>
+              </div>
+              <div>
+                <span class="muted small">Catatan</span>
+                <strong>{{ activeShift.notes || '-' }}</strong>
+              </div>
+            </div>
+          </article>
+
+          <div class="stack" style="gap:8px;">
+            <label class="field-label">Kas aktual saat tutup shift</label>
+            <input v-model.number="closeCash" class="input" type="number" min="0" placeholder="Masukkan kas fisik yang dihitung" />
+          </div>
+
+          <div class="stack" style="gap:8px;">
+            <label class="field-label">Catatan penutupan</label>
+            <textarea v-model="closeNotes" class="textarea" placeholder="Catatan selisih, setor bank, kas kurang, atau informasi lain"></textarea>
+          </div>
+
+          <div class="toolbar form-actions-row">
+            <button class="btn btn-danger" :disabled="closing" @click="closeShift">{{ closing ? 'Menutup shift...' : 'Tutup shift' }}</button>
+          </div>
         </div>
 
         <div v-else class="stack">
           <div class="empty-state">Belum ada shift yang sedang berjalan.</div>
-          <div class="stack" style="gap:8px;"><label class="field-label">Kas awal</label><input v-model.number="openCash" class="input" type="number" min="0" /></div>
-          <button class="btn btn-primary" :disabled="opening" @click="openShift">{{ opening ? 'Membuka shift...' : 'Buka shift baru' }}</button>
+          <div class="stack" style="gap:8px;">
+            <label class="field-label">Kas awal</label>
+            <input v-model.number="openCash" class="input" type="number" min="0" placeholder="Contoh: 100000" />
+          </div>
+          <div class="toolbar form-actions-row">
+            <button class="btn btn-primary" :disabled="opening" @click="openShift">{{ opening ? 'Membuka shift...' : 'Buka shift baru' }}</button>
+          </div>
         </div>
       </section>
 
       <section class="card stack">
         <div>
           <h2 style="margin:0">Riwayat shift</h2>
-          <p class="subtitle">50 shift terakhir outlet aktif.</p>
+          <p class="subtitle">Tabel desktop tetap tersedia, sedangkan mode mobile memakai kartu agar data penting lebih cepat terbaca.</p>
         </div>
 
         <div v-if="loading" class="empty-state">Memuat shift...</div>
         <div v-else-if="!shifts.length" class="empty-state">Belum ada data shift.</div>
-        <div v-else class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Dibuka</th>
-                <th>Kas awal</th>
-                <th>Kas ekspektasi</th>
-                <th>Kas aktual</th>
-                <th>Selisih</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="shift in shifts" :key="shift.id">
-                <td><span class="badge" :class="shift.status === 'open' ? 'badge-soft' : 'badge-success'">{{ shift.status }}</span></td>
-                <td>{{ new Date(shift.opened_at).toLocaleString('id-ID') }}</td>
-                <td>{{ formatCurrency(shift.opening_cash) }}</td>
-                <td>{{ formatCurrency(shift.expected_cash || 0) }}</td>
-                <td>{{ formatCurrency(shift.actual_cash || 0) }}</td>
-                <td>{{ formatCurrency(shift.cash_difference || 0) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+
+        <template v-else>
+          <div class="table-wrap desktop-table-only">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Dibuka</th>
+                  <th>Ditutup</th>
+                  <th>Kas awal</th>
+                  <th>Kas ekspektasi</th>
+                  <th>Kas aktual</th>
+                  <th>Selisih</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="shift in shifts" :key="shift.id">
+                  <td><span class="badge" :class="shift.status === 'open' ? 'badge-soft' : 'badge-success'">{{ shift.status }}</span></td>
+                  <td>{{ formatDateTime(shift.opened_at) }}</td>
+                  <td>{{ formatDateTime(shift.closed_at) }}</td>
+                  <td>{{ formatCurrency(shift.opening_cash) }}</td>
+                  <td>{{ formatCurrency(shift.expected_cash) }}</td>
+                  <td>{{ formatCurrency(shift.actual_cash) }}</td>
+                  <td>{{ formatCurrency(shift.cash_difference) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="management-card-list mobile-card-only">
+            <article v-for="shift in shifts" :key="shift.id" class="management-card compact-card">
+              <div class="management-card-top">
+                <div>
+                  <h3>{{ shift.status === 'open' ? 'Shift aktif' : 'Shift selesai' }}</h3>
+                  <p class="management-card-description">Dibuka {{ formatDateTime(shift.opened_at) }}</p>
+                </div>
+                <span class="badge" :class="shift.status === 'open' ? 'badge-soft' : 'badge-success'">{{ shift.status }}</span>
+              </div>
+
+              <div class="management-card-stats detail-grid-2">
+                <div>
+                  <span class="muted small">Kas awal</span>
+                  <strong>{{ formatCurrency(shift.opening_cash) }}</strong>
+                </div>
+                <div>
+                  <span class="muted small">Kas ekspektasi</span>
+                  <strong>{{ formatCurrency(shift.expected_cash) }}</strong>
+                </div>
+                <div>
+                  <span class="muted small">Kas aktual</span>
+                  <strong>{{ formatCurrency(shift.actual_cash) }}</strong>
+                </div>
+                <div>
+                  <span class="muted small">Selisih</span>
+                  <strong>{{ formatCurrency(shift.cash_difference) }}</strong>
+                </div>
+              </div>
+
+              <div class="stack" style="gap:6px;">
+                <span class="muted small">Ditutup</span>
+                <strong>{{ formatDateTime(shift.closed_at) }}</strong>
+                <span class="muted small">Catatan: {{ shift.notes || '-' }}</span>
+              </div>
+            </article>
+          </div>
+        </template>
       </section>
     </div>
   </div>
