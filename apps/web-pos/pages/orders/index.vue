@@ -33,7 +33,17 @@ const openDetails = async (orderId: string) => {
   errorMessage.value = ''
 
   try {
-    selectedOrder.value = await orderService.getOrderDetails(orderId)
+    const raw = await orderService.getOrderDetails(orderId)
+    // normalize column names from DB (product_name/product_price/quantity) to display names
+    if (raw?.order_items) {
+      raw.order_items = raw.order_items.map((item: any) => ({
+        ...item,
+        item_name: item.item_name || item.product_name || '-',
+        qty: item.qty || item.quantity || 0,
+        unit_price: item.unit_price || item.product_price || 0,
+      }))
+    }
+    selectedOrder.value = raw
   } catch (error: any) {
     errorMessage.value = error?.message || 'Gagal memuat detail transaksi.'
   } finally {
