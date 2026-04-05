@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { orderService } from '~/services/order.service'
+
 definePageMeta({ middleware: ['auth'] })
 
 const supabase = useSupabaseClient()
@@ -24,6 +25,18 @@ interface CartRow {
   notes: string
 }
 
+const orderTypeOptions = [
+  { value: 'dine_in', label: 'Dine in' },
+  { value: 'takeaway', label: 'Bawa pulang' },
+  { value: 'online', label: 'Pesan antar' }
+] as const
+
+const paymentOptions = [
+  { value: 'cash', label: 'Tunai' },
+  { value: 'transfer', label: 'Transfer' },
+  { value: 'qris', label: 'QRIS' }
+] as const
+
 const menus = ref<MenuRow[]>([])
 const loading = ref(false)
 const submitting = ref(false)
@@ -36,17 +49,25 @@ const paidAmount = ref<number | null>(null)
 const notes = ref('')
 const cart = ref<CartRow[]>([])
 const recentOrders = ref<any[]>([])
-const successMessage = ref('')
 const errorMessage = ref('')
-
-// ✅ FIX: Hapus debugInfo — tidak diperlukan di production
-// (debug panel yang muncul di screenshot sudah dihapus)
+const showCartSheet = ref(false)
+const showSuccessSheet = ref(false)
+const lastOrder = ref<any | null>(null)
 
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
+
 const normalizeCategoryName = (menu: MenuRow) => {
   const categoryValue = Array.isArray(menu.categories) ? menu.categories[0] : menu.categories
   return categoryValue?.name || 'Tanpa kategori'
 }
+
+const getInitials = (value: string) => value
+  .split(' ')
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((part) => part[0])
+  .join('')
+  .toUpperCase()
 
 const categoryOptions = computed(() => {
   const set = new Set<string>()
@@ -71,9 +92,7 @@ const totalQty = computed(() => cart.value.reduce((sum, item) => sum + item.qty,
 const effectivePaid = computed(() => paidAmount.value == null || Number.isNaN(paidAmount.value) ? subtotal.value : Number(paidAmount.value))
 const changeAmount = computed(() => Math.max(0, effectivePaid.value - subtotal.value))
 const insufficientPayment = computed(() => paymentMethod.value === 'cash' && effectivePaid.value < subtotal.value)
-
-// ✅ FIX: workspace.activeOutletId adalah useState Ref — gunakan .value di dalam script
-const canSubmit = computed(() => workspace.activeOutletId.value && cart.value.length > 0 && !insufficientPayment.value)
+const canSubmit = computed(() => Boolean(workspace.activeOutletId.value) && cart.value.length > 0 && !insufficientPayment.value)
 
 const todaySales = computed(() => {
   const today = new Date().toISOString().slice(0, 10)
@@ -84,6 +103,8 @@ const todayRevenue = computed(() => todaySales.value.reduce((sum, order) => sum 
 const loadMenus = async () => {
   if (!workspace.activeOutletId.value) return
   loading.value = true
+  errorMessage.value = ''
+
   try {
     const { data, error } = await supabase
       .from('menus')
@@ -94,6 +115,8 @@ const loadMenus = async () => {
 
     if (error) throw error
     menus.value = (data || []) as MenuRow[]
+  } catch (error: any) {
+    errorMessage.value = error?.message || 'Gagal memuat menu outlet.'
   } finally {
     loading.value = false
   }
@@ -101,26 +124,24 @@ const loadMenus = async () => {
 
 const loadRecentOrders = async () => {
   if (!workspace.activeOutletId.value) return
-  recentOrders.value = await orderService.listLatest(workspace.activeOutletId.value, 12)
+  recentOrders.value = await orderService.listLatest(workspace.activeOutletId.value, 8)
 }
 
 const addMenu = (menu: MenuRow) => {
-  successMessage.value = ''
   errorMessage.value = ''
   const existing = cart.value.find((item) => item.id === menu.id && !item.notes)
   if (existing) {
     existing.qty += 1
-    return
+  } else {
+    cart.value.push({
+      id: menu.id,
+      name: menu.name,
+      price: Number(menu.price || 0),
+      cost_price: Number(menu.cost_price || 0),
+      qty: 1,
+      notes: ''
+    })
   }
-
-  cart.value.unshift({
-    id: menu.id,
-    name: menu.name,
-    price: Number(menu.price || 0),
-    cost_price: Number(menu.cost_price || 0),
-    qty: 1,
-    notes: ''
-  })
 }
 
 const changeQty = (index: number, diff: number) => {
@@ -134,6 +155,16 @@ const removeItem = (index: number) => {
   cart.value.splice(index, 1)
 }
 
+const applyQuickCash = (mode: 'exact' | number) => {
+  if (mode === 'exact') {
+    paidAmount.value = subtotal.value
+    return
+  }
+
+  const base = Math.max(subtotal.value, Number(paidAmount.value || 0))
+  paidAmount.value = base + mode
+}
+
 const resetForm = () => {
   cart.value = []
   customerName.value = ''
@@ -141,6 +172,13 @@ const resetForm = () => {
   orderType.value = 'dine_in'
   paidAmount.value = null
   notes.value = ''
+  showCartSheet.value = false
+}
+
+const startNewOrder = () => {
+  resetForm()
+  showSuccessSheet.value = false
+  lastOrder.value = null
 }
 
 const submitOrder = async () => {
@@ -148,7 +186,6 @@ const submitOrder = async () => {
 
   try {
     submitting.value = true
-    successMessage.value = ''
     errorMessage.value = ''
 
     const payload = {
@@ -170,11 +207,17 @@ const submitOrder = async () => {
     }
 
     const result = await orderService.createOrder(payload)
-    successMessage.value = `Transaksi ${result.order_no} berhasil disimpan. Kembalian: ${formatCurrency(result.change_amount || 0)}.`
+    lastOrder.value = {
+      ...result,
+      payment_method: paymentMethod.value,
+      customer_name: customerName.value || 'Umum'
+    }
+    showSuccessSheet.value = true
     resetForm()
     await loadRecentOrders()
   } catch (error: any) {
     errorMessage.value = error?.message || 'Gagal membuat transaksi.'
+    showCartSheet.value = true
   } finally {
     submitting.value = false
   }
@@ -193,32 +236,43 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 </script>
 
 <template>
-  <div class="page">
-    <section class="section-title">
+  <div class="page page-pos">
+    <section class="pos-hero card glass">
       <div>
-        <h1 class="title">Kasir POS</h1>
-        <p class="subtitle">Alur transaksi dibuat lebih cepat, aman, dan mudah dipahami untuk operasional harian.</p>
+        <p class="eyebrow">Kasir mobile-first</p>
+        <h1 class="title">Kasir</h1>
+        <p class="subtitle">Tampilan dipadatkan untuk HP: pilih produk cepat, lihat keranjang jelas, lalu bayar tanpa bolak-balik layar.</p>
       </div>
-      <div class="chip-group">
-        <span class="chip active">{{ totalQty }} item di keranjang</span>
-        <span class="chip">{{ formatCurrency(todayRevenue) }} omzet hari ini</span>
-        <span class="chip">{{ todaySales.length }} transaksi hari ini</span>
+
+      <div class="pos-summary-grid">
+        <article class="summary-chip-card active">
+          <span class="summary-label">Keranjang</span>
+          <strong>{{ totalQty }} item</strong>
+        </article>
+        <article class="summary-chip-card">
+          <span class="summary-label">Omzet hari ini</span>
+          <strong>{{ formatCurrency(todayRevenue) }}</strong>
+        </article>
+        <article class="summary-chip-card">
+          <span class="summary-label">Transaksi hari ini</span>
+          <strong>{{ todaySales.length }}</strong>
+        </article>
       </div>
     </section>
 
-    <!-- ✅ FIX: Debug panel dihapus dari production view -->
-
-    <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
     <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
-    <div class="grid grid-2">
-      <section class="card stack">
-        <div class="toolbar">
-          <input v-model="search" class="input" placeholder="Cari menu, kategori, atau deskripsi..." />
+    <div class="pos-layout">
+      <section class="card stack pos-catalogue-card">
+        <div class="catalogue-toolbar">
+          <div class="search-field-wrap">
+            <span class="search-icon">⌕</span>
+            <input v-model="search" class="input search-field" placeholder="Cari menu, kategori, atau deskripsi..." />
+          </div>
           <button class="btn btn-secondary" @click="loadMenus">Refresh menu</button>
         </div>
 
-        <div class="chip-group">
+        <div class="category-scroll">
           <button
             v-for="category in categoryOptions"
             :key="category"
@@ -231,102 +285,127 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
         </div>
 
         <div v-if="loading" class="empty-state">Memuat menu outlet...</div>
-        <div v-else-if="!filteredMenus.length" class="empty-state">Menu tidak ditemukan. Coba ubah kata kunci atau pilih kategori lain.</div>
+        <div v-else-if="!filteredMenus.length" class="empty-state">Menu tidak ditemukan. Coba kata kunci atau kategori lain.</div>
 
-        <div v-else class="menu-grid">
-          <article v-for="menu in filteredMenus" :key="menu.id" class="menu-card">
-            <div class="stack" style="gap: 8px;">
-              <span class="badge badge-neutral" style="width: fit-content;">{{ normalizeCategoryName(menu) }}</span>
-              <h3>{{ menu.name }}</h3>
-              <p>{{ menu.description || 'Menu siap dijual di kasir.' }}</p>
-            </div>
+        <div v-else class="product-list">
+          <article v-for="menu in filteredMenus" :key="menu.id" class="product-row">
+            <div class="product-avatar">{{ getInitials(menu.name) }}</div>
 
-            <div class="footer">
-              <div>
-                <strong style="font-size: 20px;">{{ formatCurrency(menu.price) }}</strong>
-                <p>Modal {{ formatCurrency(menu.cost_price) }}</p>
+            <div class="product-main">
+              <div class="product-topline">
+                <h3>{{ menu.name }}</h3>
+                <strong class="product-price">{{ formatCurrency(menu.price) }}</strong>
               </div>
-              <button class="btn btn-primary" @click="addMenu(menu)">Tambah</button>
+
+              <p class="product-description">{{ menu.description || 'Siap dijual di kasir.' }}</p>
+
+              <div class="product-meta-row">
+                <span class="catalogue-badge">{{ normalizeCategoryName(menu) }}</span>
+                <span class="muted small">Modal {{ formatCurrency(menu.cost_price) }}</span>
+              </div>
             </div>
+
+            <button class="btn btn-primary product-action" @click="addMenu(menu)">Tambah</button>
           </article>
         </div>
       </section>
 
-      <section class="card stack">
+      <section class="card stack pos-order-panel" :class="{ open: showCartSheet }">
+        <div class="mobile-order-handle mobile-only" />
+
         <div class="section-title">
           <div>
-            <h2 style="margin: 0;">Keranjang & Pembayaran</h2>
-            <p class="subtitle">Satu area untuk cek item, catatan, metode bayar, dan total transaksi.</p>
+            <h2 style="margin: 0">Detail Pesanan</h2>
+            <p class="subtitle">Pelanggan, tipe order, pembayaran, lalu simpan transaksi.</p>
           </div>
-          <span class="badge badge-soft">{{ totalQty }} item</span>
+          <button class="btn btn-secondary mobile-only" @click="showCartSheet = false">Tutup</button>
         </div>
 
-        <div class="form-grid-2">
-          <div class="stack" style="gap: 8px;">
-            <label class="field-label">Nama pelanggan</label>
-            <input v-model="customerName" class="input" placeholder="Opsional" />
-          </div>
-          <div class="stack" style="gap: 8px;">
-            <label class="field-label">Tipe order</label>
-            <select v-model="orderType" class="select">
-              <option value="dine_in">Makan di tempat</option>
-              <option value="takeaway">Bawa pulang</option>
-              <option value="online">Online</option>
-            </select>
-          </div>
+        <div class="stack" style="gap: 10px;">
+          <label class="field-label">Pelanggan</label>
+          <input v-model="customerName" class="input" placeholder="Nama pelanggan (opsional)" />
         </div>
 
-        <div class="form-grid-2">
-          <div class="stack" style="gap: 8px;">
-            <label class="field-label">Metode pembayaran</label>
-            <select v-model="paymentMethod" class="select">
-              <option value="cash">Tunai</option>
-              <option value="transfer">Transfer</option>
-              <option value="qris">QRIS</option>
-            </select>
-          </div>
-          <div class="stack" style="gap: 8px;">
-            <label class="field-label">Nominal dibayar</label>
-            <input
-              v-model.number="paidAmount"
-              class="input"
-              type="number"
-              min="0"
-              :placeholder="paymentMethod === 'cash' ? 'Masukkan uang diterima' : String(subtotal)"
-            />
+        <div class="stack" style="gap: 10px;">
+          <label class="field-label">Tipe pesanan</label>
+          <div class="segmented-row">
+            <button
+              v-for="type in orderTypeOptions"
+              :key="type.value"
+              class="segment-button"
+              :class="{ active: orderType === type.value }"
+              @click="orderType = type.value"
+            >
+              {{ type.label }}
+            </button>
           </div>
         </div>
 
-        <div class="stack" style="gap: 8px;">
-          <label class="field-label">Catatan transaksi</label>
-          <textarea v-model="notes" class="textarea" placeholder="Opsional. Contoh: meja pojok, pelanggan langganan, dll."></textarea>
+        <div class="stack" style="gap: 10px;">
+          <label class="field-label">Metode pembayaran</label>
+          <div class="segmented-row">
+            <button
+              v-for="method in paymentOptions"
+              :key="method.value"
+              class="segment-button"
+              :class="{ active: paymentMethod === method.value }"
+              @click="paymentMethod = method.value"
+            >
+              {{ method.label }}
+            </button>
+          </div>
         </div>
 
-        <div v-if="!cart.length" class="empty-state">Belum ada item. Tambahkan produk dari katalog di sebelah kiri.</div>
+        <div v-if="!cart.length" class="empty-state">Belum ada item. Tambahkan produk dari daftar di atas.</div>
 
-        <div v-else class="cart-list">
-          <div v-for="(item, index) in cart" :key="`${item.id}-${index}`" class="cart-item">
-            <div class="cart-item-top">
-              <div>
+        <div v-else class="order-item-list">
+          <article v-for="(item, index) in cart" :key="`${item.id}-${index}`" class="order-item-card">
+            <div class="order-item-line">
+              <div class="qty-pill">{{ item.qty }}</div>
+              <div class="order-item-info">
                 <strong>{{ item.name }}</strong>
                 <p class="muted small">{{ formatCurrency(item.price) }} / item</p>
+              </div>
+              <strong>{{ formatCurrency(item.qty * item.price) }}</strong>
+            </div>
+
+            <div class="order-item-actions">
+              <div class="qty-stepper">
+                <button @click="changeQty(index, -1)">-</button>
+                <span>{{ item.qty }}</span>
+                <button @click="changeQty(index, 1)">+</button>
               </div>
               <button class="btn btn-secondary" @click="removeItem(index)">Hapus</button>
             </div>
 
-            <div class="qty-control">
-              <button @click="changeQty(index, -1)">-</button>
-              <strong>{{ item.qty }}</strong>
-              <button @click="changeQty(index, 1)">+</button>
-              <span class="spacer" />
-              <strong>{{ formatCurrency(item.qty * item.price) }}</strong>
-            </div>
+            <input v-model="item.notes" class="input" placeholder="Catatan item, mis. tanpa gula / pedas" />
+          </article>
+        </div>
 
-            <input v-model="item.notes" class="input" placeholder="Catatan item, mis. tanpa gula / tambah es" />
+        <div class="stack" style="gap: 10px;">
+          <label class="field-label">Catatan transaksi</label>
+          <textarea v-model="notes" class="textarea" placeholder="Contoh: meja 10, pelanggan langganan, paket keluarga"></textarea>
+        </div>
+
+        <div class="stack" style="gap: 10px;">
+          <label class="field-label">Uang diterima</label>
+          <input
+            v-model.number="paidAmount"
+            class="input amount-input"
+            type="number"
+            min="0"
+            :placeholder="paymentMethod === 'cash' ? 'Masukkan uang diterima' : String(subtotal)"
+          />
+
+          <div v-if="paymentMethod === 'cash'" class="quick-cash-row">
+            <button class="btn btn-secondary" @click="applyQuickCash('exact')">Uang pas</button>
+            <button class="btn btn-secondary" @click="applyQuickCash(5000)">+5.000</button>
+            <button class="btn btn-secondary" @click="applyQuickCash(10000)">+10.000</button>
+            <button class="btn btn-secondary" @click="applyQuickCash(20000)">+20.000</button>
           </div>
         </div>
 
-        <div class="summary-list">
+        <div class="summary-list order-summary-list">
           <div class="summary-row"><span class="muted">Subtotal</span><strong>{{ formatCurrency(subtotal) }}</strong></div>
           <div class="summary-row"><span class="muted">Dibayar</span><strong>{{ formatCurrency(effectivePaid) }}</strong></div>
           <div class="summary-row"><span class="muted">Kembalian</span><strong>{{ formatCurrency(changeAmount) }}</strong></div>
@@ -334,53 +413,69 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
         </div>
 
         <div v-if="insufficientPayment" class="alert alert-warning">
-          Nominal tunai masih kurang. Pastikan nominal dibayar minimal sama dengan total transaksi.
+          Nominal tunai masih kurang. Minimal harus sama dengan total tagihan.
         </div>
 
-        <div class="toolbar">
-          <button class="btn btn-secondary" @click="resetForm">Reset keranjang</button>
-          <span class="spacer" />
-          <button class="btn btn-primary btn-lg" :disabled="submitting || !canSubmit" @click="submitOrder">
-            {{ submitting ? 'Menyimpan transaksi...' : 'Bayar & Simpan Transaksi' }}
+        <div class="order-footer-actions">
+          <button class="btn btn-secondary" @click="resetForm">Reset</button>
+          <button class="btn btn-dark btn-lg" :disabled="submitting || !canSubmit" @click="submitOrder">
+            {{ submitting ? 'Menyimpan...' : `Bayar ${formatCurrency(subtotal)}` }}
           </button>
         </div>
       </section>
     </div>
 
-    <section class="card stack">
+    <section class="card stack recent-order-card">
       <div class="section-title">
         <div>
-          <h2 style="margin: 0;">Transaksi terbaru</h2>
-          <p class="subtitle">Pantau transaksi yang baru masuk tanpa pindah halaman.</p>
+          <h2 style="margin: 0">Transaksi terbaru</h2>
+          <p class="subtitle">Riwayat singkat untuk cek order yang baru masuk.</p>
         </div>
-        <button class="btn btn-secondary" @click="loadRecentOrders">Refresh transaksi</button>
+        <button class="btn btn-secondary" @click="loadRecentOrders">Refresh</button>
       </div>
 
       <div v-if="!recentOrders.length" class="empty-state">Belum ada transaksi terbaru pada outlet ini.</div>
-      <div v-else class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>No. Order</th>
-              <th>Pelanggan</th>
-              <th>Metode</th>
-              <th>Status</th>
-              <th>Waktu</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="order in recentOrders" :key="order.id">
-              <td><strong>{{ order.order_no }}</strong></td>
-              <td>{{ order.customer_name || 'Umum' }}</td>
-              <td>{{ order.payment_method }}</td>
-              <td><span class="badge badge-success">{{ order.status }}</span></td>
-              <td>{{ new Date(order.created_at).toLocaleString('id-ID') }}</td>
-              <td><strong>{{ formatCurrency(order.total) }}</strong></td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else class="recent-order-list">
+        <article v-for="order in recentOrders" :key="order.id" class="recent-order-item">
+          <div>
+            <strong>{{ order.order_no }}</strong>
+            <p class="muted small">{{ order.customer_name || 'Umum' }} · {{ order.payment_method }} · {{ new Date(order.created_at).toLocaleString('id-ID') }}</p>
+          </div>
+          <strong>{{ formatCurrency(order.total) }}</strong>
+        </article>
       </div>
     </section>
+
+    <div v-if="cart.length" class="mobile-cart-bar mobile-only">
+      <button class="mobile-cart-button" @click="showCartSheet = true">
+        <span>{{ totalQty }} item</span>
+        <strong>Bayar {{ formatCurrency(subtotal) }}</strong>
+      </button>
+    </div>
+
+    <div v-if="showCartSheet" class="mobile-sheet-backdrop mobile-only" @click="showCartSheet = false" />
+
+    <div v-if="showSuccessSheet && lastOrder" class="modal-backdrop" @click="showSuccessSheet = false">
+      <div class="modal-card success-state-card" @click.stop>
+        <div class="success-mark">✓</div>
+        <h2>Transaksi Sukses!</h2>
+        <p class="subtitle">{{ lastOrder.order_no }} berhasil disimpan.</p>
+
+        <div class="success-pills">
+          <span class="chip active">Metode: {{ lastOrder.payment_method }}</span>
+          <span class="chip">Pelanggan: {{ lastOrder.customer_name }}</span>
+        </div>
+
+        <div class="success-summary">
+          <div class="summary-row"><span>Total</span><strong>{{ formatCurrency(lastOrder.total || 0) }}</strong></div>
+          <div class="summary-row"><span>Kembalian</span><strong>{{ formatCurrency(lastOrder.change_amount || 0) }}</strong></div>
+        </div>
+
+        <div class="success-actions">
+          <button class="btn btn-secondary" @click="showSuccessSheet = false">Tutup</button>
+          <button class="btn btn-dark" @click="startNewOrder">Buat pesanan baru</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
