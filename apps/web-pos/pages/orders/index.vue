@@ -83,7 +83,6 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
         </div>
       </div>
     </section>
-    </section>
 
     <div class="grid grid-4">
       <article class="kpi-card"><h3>Total transaksi</h3><div class="value">{{ orders.length }}</div><div class="hint">100 transaksi terakhir outlet aktif</div></article>
