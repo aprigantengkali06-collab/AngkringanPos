@@ -5,15 +5,27 @@ const supabase = useSupabaseClient()
 const workspace = useWorkspace()
 
 const loading = ref(false)
-const opening = ref(false)
-const closing = ref(false)
-const shifts = ref<any[]>([])
-const activeShift = ref<any | null>(null)
+const saving = ref(false)
+const products = ref<any[]>([])
+const categories = ref<any[]>([])
 const errorMessage = ref('')
 const successMessage = ref('')
-const openCash = ref(0)
-const closeCash = ref<number | null>(null)
-const closeNotes = ref('')
+const showForm = ref(false)
+const editingProduct = ref<any | null>(null)
+
+const form = ref({
+  name: '',
+  price: 0,
+  category_id: '',
+  description: '',
+  is_available: true
+})
+
+const resetForm = () => {
+  form.value = { name: '', price: 0, category_id: '', description: '', is_available: true }
+  editingProduct.value = null
+  showForm.value = false
+}
 
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
 
@@ -22,72 +34,98 @@ const load = async () => {
   loading.value = true
   errorMessage.value = ''
   try {
-    const { data, error } = await supabase
-      .from('shifts')
-      .select('id, outlet_id, opened_by, closed_by, opened_at, closed_at, opening_cash, expected_cash, actual_cash, cash_difference, status, notes')
-      .eq('outlet_id', workspace.activeOutletId.value)
-      .order('opened_at', { ascending: false })
-      .limit(50)
-
-    if (error) throw error
-    shifts.value = data || []
-    activeShift.value = shifts.value.find((item) => item.status === 'open') || null
-  } catch (error: any) {
-    errorMessage.value = error?.message || 'Gagal memuat data shift.'
+    const [prodRes, catRes] = await Promise.all([
+      supabase.from('products')
+        .select('*')
+        .eq('outlet_id', workspace.activeOutletId.value)
+        .order('name'),
+      supabase.from('categories')
+        .select('*')
+        .eq('outlet_id', workspace.activeOutletId.value)
+        .order('name')
+    ])
+    if (prodRes.error) throw prodRes.error
+    if (catRes.error) throw catRes.error
+    products.value = prodRes.data || []
+    categories.value = catRes.data || []
+  } catch (e: any) {
+    errorMessage.value = e?.message || 'Gagal memuat produk.'
   } finally {
     loading.value = false
   }
 }
 
-const openShift = async () => {
-  if (!workspace.activeOutletId.value || !workspace.profile.value?.id) return
-  opening.value = true
+const openAdd = () => {
+  resetForm()
+  showForm.value = true
+}
+
+const openEdit = (product: any) => {
+  editingProduct.value = product
+  form.value = {
+    name: product.name,
+    price: product.price,
+    category_id: product.category_id || '',
+    description: product.description || '',
+    is_available: product.is_available
+  }
+  showForm.value = true
+}
+
+const saveProduct = async () => {
+  if (!form.value.name || !workspace.activeOutletId.value) return
+  saving.value = true
   errorMessage.value = ''
   successMessage.value = ''
   try {
-    const { error } = await supabase.from('shifts').insert({
-      outlet_id: workspace.activeOutletId.value,
-      opened_by: workspace.profile.value.id,
-      opening_cash: Number(openCash.value || 0),
-      status: 'open'
-    })
+    const payload: any = {
+      name: form.value.name,
+      price: Number(form.value.price || 0),
+      description: form.value.description || null,
+      category_id: form.value.category_id || null,
+      is_available: form.value.is_available,
+      outlet_id: workspace.activeOutletId.value
+    }
 
-    if (error) throw error
-    successMessage.value = 'Shift berhasil dibuka.'
-    openCash.value = 0
+    if (editingProduct.value) {
+      const { error } = await supabase.from('products').update(payload).eq('id', editingProduct.value.id)
+      if (error) throw error
+      successMessage.value = 'Produk berhasil diperbarui.'
+    } else {
+      const { error } = await supabase.from('products').insert(payload)
+      if (error) throw error
+      successMessage.value = 'Produk berhasil ditambahkan.'
+    }
+    resetForm()
     await load()
-  } catch (error: any) {
-    errorMessage.value = error?.message || 'Gagal membuka shift.'
+  } catch (e: any) {
+    errorMessage.value = e?.message || 'Gagal menyimpan produk.'
   } finally {
-    opening.value = false
+    saving.value = false
   }
 }
 
-const closeShift = async () => {
-  if (!activeShift.value) return
-  closing.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
+const deleteProduct = async (id: string) => {
+  if (!confirm('Hapus produk ini?')) return
   try {
-    const { data, error } = await supabase.functions.invoke('close-shift', {
-      body: {
-        shift_id: activeShift.value.id,
-        actual_cash: Number(closeCash.value || 0),
-        notes: closeNotes.value.trim() || null
-      }
-    })
-
+    const { error } = await supabase.from('products').delete().eq('id', id)
     if (error) throw error
-    if (data?.ok === false) throw new Error(data.error || 'Gagal menutup shift')
-
-    successMessage.value = 'Shift berhasil ditutup dan direkonsiliasi.'
-    closeCash.value = null
-    closeNotes.value = ''
+    successMessage.value = 'Produk dihapus.'
     await load()
-  } catch (error: any) {
-    errorMessage.value = error?.message || 'Gagal menutup shift.'
-  } finally {
-    closing.value = false
+  } catch (e: any) {
+    errorMessage.value = e?.message || 'Gagal menghapus produk.'
+  }
+}
+
+const toggleAvailable = async (product: any) => {
+  try {
+    const { error } = await supabase.from('products')
+      .update({ is_available: !product.is_available })
+      .eq('id', product.id)
+    if (error) throw error
+    product.is_available = !product.is_available
+  } catch (e: any) {
+    errorMessage.value = e?.message
   }
 }
 
@@ -106,68 +144,91 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   <div class="page">
     <section class="section-title">
       <div>
-        <h1 class="title">Shift Kasir</h1>
-        <p class="subtitle">Buka shift dengan kas awal, lalu tutup shift menggunakan hitungan aktual agar selisih kas bisa diketahui.</p>
+        <h1 class="title">Kelola Produk</h1>
+        <p class="subtitle">Tambah, edit, dan atur ketersediaan produk menu outlet Anda.</p>
       </div>
+      <button class="btn btn-primary" @click="openAdd">+ Tambah Produk</button>
     </section>
 
     <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
     <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
-    <div class="grid grid-2">
-      <section class="card stack">
-        <div>
-          <h2 style="margin:0">Shift aktif</h2>
-          <p class="subtitle">Jika belum ada shift, buka dulu sebelum transaksi ramai berjalan.</p>
-        </div>
+    <!-- Form tambah/edit -->
+    <div v-if="showForm" class="card stack" style="margin-bottom:1rem;">
+      <h2 style="margin:0">{{ editingProduct ? 'Edit Produk' : 'Tambah Produk Baru' }}</h2>
+      <div class="stack" style="gap:8px;">
+        <label class="field-label">Nama Produk *</label>
+        <input v-model="form.name" class="input" placeholder="Contoh: Nasi Goreng" />
+      </div>
+      <div class="stack" style="gap:8px;">
+        <label class="field-label">Harga (Rp) *</label>
+        <input v-model.number="form.price" class="input" type="number" min="0" placeholder="15000" />
+      </div>
+      <div class="stack" style="gap:8px;">
+        <label class="field-label">Kategori</label>
+        <select v-model="form.category_id" class="input">
+          <option value="">-- Tanpa Kategori --</option>
+          <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+        </select>
+      </div>
+      <div class="stack" style="gap:8px;">
+        <label class="field-label">Deskripsi</label>
+        <input v-model="form.description" class="input" placeholder="Opsional" />
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input v-model="form.is_available" type="checkbox" id="is_available" />
+        <label for="is_available" class="field-label" style="margin:0">Tersedia</label>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" :disabled="saving" @click="saveProduct">
+          {{ saving ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+        <button class="btn btn-secondary" @click="resetForm">Batal</button>
+      </div>
+    </div>
 
-        <div v-if="activeShift" class="stack">
-          <div class="kpi-card"><h3>Kas awal</h3><div class="value">{{ formatCurrency(activeShift.opening_cash) }}</div><div class="hint">Dibuka pada {{ new Date(activeShift.opened_at).toLocaleString('id-ID') }}</div></div>
-          <div class="stack" style="gap:8px;"><label class="field-label">Kas aktual saat tutup shift</label><input v-model.number="closeCash" class="input" type="number" min="0" /></div>
-          <div class="stack" style="gap:8px;"><label class="field-label">Catatan penutupan</label><textarea v-model="closeNotes" class="textarea" placeholder="Catatan selisih, setor bank, dll."></textarea></div>
-          <button class="btn btn-danger" :disabled="closing" @click="closeShift">{{ closing ? 'Menutup shift...' : 'Tutup shift' }}</button>
-        </div>
-
-        <div v-else class="stack">
-          <div class="empty-state">Belum ada shift yang sedang berjalan.</div>
-          <div class="stack" style="gap:8px;"><label class="field-label">Kas awal</label><input v-model.number="openCash" class="input" type="number" min="0" /></div>
-          <button class="btn btn-primary" :disabled="opening" @click="openShift">{{ opening ? 'Membuka shift...' : 'Buka shift baru' }}</button>
-        </div>
-      </section>
-
-      <section class="card stack">
-        <div>
-          <h2 style="margin:0">Riwayat shift</h2>
-          <p class="subtitle">50 shift terakhir outlet aktif.</p>
-        </div>
-
-        <div v-if="loading" class="empty-state">Memuat shift...</div>
-        <div v-else-if="!shifts.length" class="empty-state">Belum ada data shift.</div>
-        <div v-else class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Dibuka</th>
-                <th>Kas awal</th>
-                <th>Kas ekspektasi</th>
-                <th>Kas aktual</th>
-                <th>Selisih</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="shift in shifts" :key="shift.id">
-                <td><span class="badge" :class="shift.status === 'open' ? 'badge-soft' : 'badge-success'">{{ shift.status }}</span></td>
-                <td>{{ new Date(shift.opened_at).toLocaleString('id-ID') }}</td>
-                <td>{{ formatCurrency(shift.opening_cash) }}</td>
-                <td>{{ formatCurrency(shift.expected_cash || 0) }}</td>
-                <td>{{ formatCurrency(shift.actual_cash || 0) }}</td>
-                <td>{{ formatCurrency(shift.cash_difference || 0) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+    <!-- Daftar produk -->
+    <div class="card">
+      <div v-if="loading" class="empty-state">Memuat produk...</div>
+      <div v-else-if="!products.length" class="empty-state">
+        Belum ada produk. Tap "+ Tambah Produk" untuk mulai.
+      </div>
+      <div v-else class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Nama</th>
+              <th>Harga</th>
+              <th>Kategori</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="product in products" :key="product.id">
+              <td>{{ product.name }}</td>
+              <td>{{ formatCurrency(product.price) }}</td>
+              <td>{{ categories.find(c => c.id === product.category_id)?.name || '-' }}</td>
+              <td>
+                <span
+                  class="badge"
+                  :class="product.is_available ? 'badge-success' : 'badge-soft'"
+                  style="cursor:pointer"
+                  @click="toggleAvailable(product)"
+                >
+                  {{ product.is_available ? 'Tersedia' : 'Habis' }}
+                </span>
+              </td>
+              <td>
+                <div style="display:flex;gap:4px;">
+                  <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" @click="openEdit(product)">Edit</button>
+                  <button class="btn btn-danger" style="padding:4px 8px;font-size:12px" @click="deleteProduct(product.id)">Hapus</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
