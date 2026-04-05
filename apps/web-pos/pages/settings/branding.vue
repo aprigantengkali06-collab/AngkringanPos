@@ -82,7 +82,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     <section class="section-title">
       <div>
         <h1 class="title">Branding & Struk</h1>
-        <p class="subtitle">Warna brand, footer struk, WhatsApp, dan identitas yang tampil ke pelanggan.</p>
+        <p class="subtitle">Warna brand, footer struk, WhatsApp, dan identitas yang tampil ke pelanggan. Tampilan diatur ulang agar editing dari mobile lebih nyaman.</p>
       </div>
     </section>
 
@@ -91,29 +91,46 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
     <div class="grid grid-2">
       <section class="card stack">
-        <div class="form-grid-2">
-          <div class="stack" style="gap:8px;"><label class="field-label">Nama brand</label><input v-model="form.brand_name" class="input" /></div>
-          <div class="stack" style="gap:8px;"><label class="field-label">WhatsApp</label><input v-model="form.whatsapp_number" class="input" /></div>
+        <div>
+          <h2 style="margin:0">Form branding</h2>
+          <p class="subtitle">Semua field tetap mengarah ke tabel <strong>branding_settings</strong> yang sama.</p>
         </div>
+
+        <div class="form-grid-2">
+          <div class="stack" style="gap:8px;"><label class="field-label">Nama brand</label><input v-model="form.brand_name" class="input" placeholder="Nama brand di struk" /></div>
+          <div class="stack" style="gap:8px;"><label class="field-label">WhatsApp</label><input v-model="form.whatsapp_number" class="input" placeholder="08xxxxxxxxxx" /></div>
+        </div>
+
         <div class="form-grid-2">
           <div class="stack" style="gap:8px;"><label class="field-label">Warna utama</label><input v-model="form.primary_color" class="input" type="color" /></div>
           <div class="stack" style="gap:8px;"><label class="field-label">Warna sekunder</label><input v-model="form.secondary_color" class="input" type="color" /></div>
         </div>
-        <div class="stack" style="gap:8px;"><label class="field-label">Instagram URL</label><input v-model="form.instagram_url" class="input" /></div>
-        <div class="stack" style="gap:8px;"><label class="field-label">Footer struk</label><textarea v-model="form.receipt_footer" class="textarea"></textarea></div>
-        <button class="btn btn-primary" :disabled="saving" @click="save">{{ saving ? 'Menyimpan...' : 'Simpan branding' }}</button>
+
+        <div class="stack" style="gap:8px;"><label class="field-label">Instagram URL</label><input v-model="form.instagram_url" class="input" placeholder="https://instagram.com/..." /></div>
+        <div class="stack" style="gap:8px;"><label class="field-label">Footer struk</label><textarea v-model="form.receipt_footer" class="textarea" placeholder="Pesan singkat untuk pelanggan"></textarea></div>
+
+        <div class="toolbar form-actions-row">
+          <button class="btn btn-primary" :disabled="saving" @click="save">{{ saving ? 'Menyimpan...' : 'Simpan branding' }}</button>
+        </div>
       </section>
 
       <section class="card stack">
         <div>
           <h2 style="margin:0">Preview cepat</h2>
-          <p class="subtitle">Contoh tampilan ringkas yang akan memengaruhi identitas outlet.</p>
+          <p class="subtitle">Contoh visual identitas brand dan footer struk.</p>
         </div>
-        <div :style="{ borderRadius: '22px', padding: '22px', background: `linear-gradient(180deg, ${form.primary_color}22 0%, #ffffff 100%)`, border: `1px solid ${form.primary_color}44` }">
-          <div style="display:grid;gap:8px;">
+
+        <div :style="{ borderRadius: '22px', padding: '22px', background: `linear-gradient(180deg, ${form.primary_color}22 0%, #ffffff 100%)`, border: `1px solid ${form.primary_color}44`, display: 'grid', gap: '16px' }">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <span :style="{ width: '18px', height: '18px', borderRadius: '999px', background: form.primary_color, border: '1px solid #ffffffaa' }"></span>
+            <span :style="{ width: '18px', height: '18px', borderRadius: '999px', background: form.secondary_color, border: '1px solid #ffffffaa' }"></span>
+            <span class="muted small">Kombinasi warna brand</span>
+          </div>
+
+          <div style="display:grid; gap:8px;">
             <strong :style="{ fontSize: '24px', color: form.secondary_color }">{{ form.brand_name || 'Nama Brand' }}</strong>
             <span class="muted">Outlet {{ activeOutlet?.name || 'aktif' }}</span>
-            <p :style="{ color: form.secondary_color, whiteSpace: 'pre-line' }">{{ form.receipt_footer }}</p>
+            <p :style="{ color: form.secondary_color, whiteSpace: 'pre-line', margin: 0, lineHeight: '1.6' }">{{ form.receipt_footer }}</p>
             <span class="muted">WhatsApp: {{ form.whatsapp_number || '-' }}</span>
             <span class="muted">Instagram: {{ form.instagram_url || '-' }}</span>
           </div>
