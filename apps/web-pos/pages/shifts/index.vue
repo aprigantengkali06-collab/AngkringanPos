@@ -63,21 +63,53 @@ const openShift = async () => {
   }
 }
 
+const shouldFallbackToRpc = (message: string) => {
+  const normalized = String(message || '').toLowerCase()
+  return [
+    'edge function',
+    'failed to send a request',
+    'fetch failed',
+    'failed to fetch',
+    'functionsfetcherror',
+    'networkerror',
+    'non-2xx status code',
+    'cors'
+  ].some((keyword) => normalized.includes(keyword))
+}
+
 const closeShift = async () => {
   if (!activeShift.value) return
   closing.value = true
   errorMessage.value = ''
   successMessage.value = ''
-  try {
-    const { data, error } = await supabase.functions.invoke('close-shift', {
-      body: {
-        shift_id: activeShift.value.id,
-        actual_cash: Number(closeCash.value || 0),
-        notes: closeNotes.value.trim() || null
-      }
-    })
 
-    if (error) throw error
+  try {
+    let data: any = null
+
+    try {
+      const result = await supabase.functions.invoke('close-shift', {
+        body: {
+          shift_id: activeShift.value.id,
+          actual_cash: Number(closeCash.value || 0),
+          notes: closeNotes.value.trim() || null
+        }
+      })
+
+      if (result.error) throw result.error
+      data = result.data
+    } catch (invokeError: any) {
+      if (!shouldFallbackToRpc(invokeError?.message || '')) throw invokeError
+
+      const rpcResult = await supabase.rpc('close_shift_pos', {
+        p_shift_id: activeShift.value.id,
+        p_actual_cash: Number(closeCash.value || 0),
+        p_notes: closeNotes.value.trim() || null
+      })
+
+      if (rpcResult.error) throw rpcResult.error
+      data = rpcResult.data
+    }
+
     if (data?.ok === false) throw new Error(data.error || 'Gagal menutup shift')
 
     successMessage.value = 'Shift berhasil ditutup dan direkonsiliasi.'
