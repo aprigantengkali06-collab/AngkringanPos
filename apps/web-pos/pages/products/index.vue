@@ -217,14 +217,16 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
 <template>
   <div class="page">
-    <section class="section-title">
-      <div>
-        <h1 class="title">Kelola Produk</h1>
-        <p class="subtitle">Manajemen menu sekarang langsung terhubung ke tabel <strong>menus</strong> Supabase agar data kasir, laporan, dan stok tampil sinkron.</p>
-      </div>
-      <div class="toolbar page-header-actions">
-        <button class="btn btn-secondary" @click="load">Refresh</button>
-        <button class="btn btn-primary" @click="openAdd">+ Tambah Menu</button>
+    <section class="page-hero">
+      <div class="page-hero-top">
+        <div>
+          <p class="eyebrow">Manajemen</p>
+          <h1 class="page-hero-title">Kelola Produk</h1>
+        </div>
+        <div class="toolbar page-header-actions">
+          <button class="btn btn-secondary" @click="load">Refresh</button>
+          <button class="btn btn-primary" @click="openAdd">+ Tambah Menu</button>
+        </div>
       </div>
     </section>
 
