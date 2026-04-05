@@ -4,52 +4,112 @@ definePageMeta({ middleware: ['auth'] })
 const supabase = useSupabaseClient()
 const workspace = useWorkspace()
 
+type StatusFilter = 'all' | 'available' | 'unavailable'
+
+interface CategoryRow {
+  id: string
+  name: string
+}
+
+interface MenuRow {
+  id: string
+  name: string
+  price: number
+  cost_price: number
+  category_id: string | null
+  description: string | null
+  is_available: boolean
+  categories?: { name: string } | { name: string }[] | null
+}
+
 const loading = ref(false)
 const saving = ref(false)
-const products = ref<any[]>([])
-const categories = ref<any[]>([])
+const menus = ref<MenuRow[]>([])
+const categories = ref<CategoryRow[]>([])
 const errorMessage = ref('')
 const successMessage = ref('')
 const showForm = ref(false)
-const editingProduct = ref<any | null>(null)
+const editingMenu = ref<MenuRow | null>(null)
+const search = ref('')
+const statusFilter = ref<StatusFilter>('all')
 
 const form = ref({
   name: '',
   price: 0,
+  cost_price: 0,
   category_id: '',
   description: '',
   is_available: true
 })
 
+const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
+
+const getCategoryName = (menu: MenuRow) => {
+  const categoryValue = Array.isArray(menu.categories) ? menu.categories[0] : menu.categories
+  return categoryValue?.name || categories.value.find((item) => item.id === menu.category_id)?.name || 'Tanpa kategori'
+}
+
 const resetForm = () => {
-  form.value = { name: '', price: 0, category_id: '', description: '', is_available: true }
-  editingProduct.value = null
+  form.value = {
+    name: '',
+    price: 0,
+    cost_price: 0,
+    category_id: '',
+    description: '',
+    is_available: true
+  }
+  editingMenu.value = null
   showForm.value = false
 }
 
-const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
+const totalMenus = computed(() => menus.value.length)
+const availableMenus = computed(() => menus.value.filter((item) => item.is_available).length)
+const unavailableMenus = computed(() => menus.value.filter((item) => !item.is_available).length)
+
+const filteredMenus = computed(() => {
+  const keyword = search.value.trim().toLowerCase()
+
+  return menus.value.filter((menu) => {
+    const matchesSearch = !keyword || [
+      menu.name,
+      menu.description || '',
+      getCategoryName(menu)
+    ].join(' ').toLowerCase().includes(keyword)
+
+    const matchesStatus = statusFilter.value === 'all'
+      || (statusFilter.value === 'available' && menu.is_available)
+      || (statusFilter.value === 'unavailable' && !menu.is_available)
+
+    return matchesSearch && matchesStatus
+  })
+})
 
 const load = async () => {
   if (!workspace.activeOutletId.value) return
   loading.value = true
   errorMessage.value = ''
+
   try {
-    const [prodRes, catRes] = await Promise.all([
-      supabase.from('products')
-        .select('*')
+    const [menuRes, catRes] = await Promise.all([
+      supabase
+        .from('menus')
+        .select('id, name, price, cost_price, category_id, description, is_available, categories(name)')
         .eq('outlet_id', workspace.activeOutletId.value)
         .order('name'),
-      supabase.from('categories')
-        .select('*')
+      supabase
+        .from('categories')
+        .select('id, name')
         .eq('outlet_id', workspace.activeOutletId.value)
         .order('name')
     ])
-    if (prodRes.error) throw prodRes.error
+
+    if (menuRes.error) throw menuRes.error
     if (catRes.error) throw catRes.error
-    products.value = prodRes.data || []
-    categories.value = catRes.data || []
-  } catch (e: any) {
-    errorMessage.value = e?.message || 'Gagal memuat produk.'
+
+    menus.value = (menuRes.data || []) as MenuRow[]
+    categories.value = (catRes.data || []) as CategoryRow[]
+  } catch (error: any) {
+    errorMessage.value = error?.message || 'Gagal memuat daftar menu.'
   } finally {
     loading.value = false
   }
@@ -60,72 +120,87 @@ const openAdd = () => {
   showForm.value = true
 }
 
-const openEdit = (product: any) => {
-  editingProduct.value = product
+const openEdit = (menu: MenuRow) => {
+  editingMenu.value = menu
   form.value = {
-    name: product.name,
-    price: product.price,
-    category_id: product.category_id || '',
-    description: product.description || '',
-    is_available: product.is_available
+    name: menu.name,
+    price: Number(menu.price || 0),
+    cost_price: Number(menu.cost_price || 0),
+    category_id: menu.category_id || '',
+    description: menu.description || '',
+    is_available: menu.is_available
   }
   showForm.value = true
 }
 
-const saveProduct = async () => {
-  if (!form.value.name || !workspace.activeOutletId.value) return
+const saveMenu = async () => {
+  if (!workspace.activeOutletId.value || !form.value.name.trim()) return
   saving.value = true
   errorMessage.value = ''
   successMessage.value = ''
+
   try {
-    const payload: any = {
-      name: form.value.name,
+    const payload = {
+      outlet_id: workspace.activeOutletId.value,
+      name: form.value.name.trim(),
       price: Number(form.value.price || 0),
-      description: form.value.description || null,
+      cost_price: Number(form.value.cost_price || 0),
       category_id: form.value.category_id || null,
-      is_available: form.value.is_available,
-      outlet_id: workspace.activeOutletId.value
+      description: form.value.description.trim() || null,
+      is_available: form.value.is_available
     }
 
-    if (editingProduct.value) {
-      const { error } = await supabase.from('products').update(payload).eq('id', editingProduct.value.id)
+    if (editingMenu.value) {
+      const { error } = await supabase
+        .from('menus')
+        .update(payload)
+        .eq('id', editingMenu.value.id)
+
       if (error) throw error
-      successMessage.value = 'Produk berhasil diperbarui.'
+      successMessage.value = 'Menu berhasil diperbarui.'
     } else {
-      const { error } = await supabase.from('products').insert(payload)
+      const { error } = await supabase.from('menus').insert(payload)
       if (error) throw error
-      successMessage.value = 'Produk berhasil ditambahkan.'
+      successMessage.value = 'Menu berhasil ditambahkan.'
     }
+
     resetForm()
     await load()
-  } catch (e: any) {
-    errorMessage.value = e?.message || 'Gagal menyimpan produk.'
+  } catch (error: any) {
+    errorMessage.value = error?.message || 'Gagal menyimpan menu.'
   } finally {
     saving.value = false
   }
 }
 
-const deleteProduct = async (id: string) => {
-  if (!confirm('Hapus produk ini?')) return
+const deleteMenu = async (id: string) => {
+  if (!confirm('Hapus menu ini?')) return
+
   try {
-    const { error } = await supabase.from('products').delete().eq('id', id)
+    const { error } = await supabase.from('menus').delete().eq('id', id)
     if (error) throw error
-    successMessage.value = 'Produk dihapus.'
+
+    successMessage.value = 'Menu berhasil dihapus.'
     await load()
-  } catch (e: any) {
-    errorMessage.value = e?.message || 'Gagal menghapus produk.'
+  } catch (error: any) {
+    errorMessage.value = error?.message || 'Gagal menghapus menu.'
   }
 }
 
-const toggleAvailable = async (product: any) => {
+const toggleAvailable = async (menu: MenuRow) => {
   try {
-    const { error } = await supabase.from('products')
-      .update({ is_available: !product.is_available })
-      .eq('id', product.id)
+    const nextValue = !menu.is_available
+    const { error } = await supabase
+      .from('menus')
+      .update({ is_available: nextValue })
+      .eq('id', menu.id)
+
     if (error) throw error
-    product.is_available = !product.is_available
-  } catch (e: any) {
-    errorMessage.value = e?.message
+
+    menu.is_available = nextValue
+    successMessage.value = nextValue ? 'Menu diaktifkan kembali.' : 'Menu ditandai habis.'
+  } catch (error: any) {
+    errorMessage.value = error?.message || 'Gagal mengubah status menu.'
   }
 }
 
@@ -145,90 +220,138 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     <section class="section-title">
       <div>
         <h1 class="title">Kelola Produk</h1>
-        <p class="subtitle">Tambah, edit, dan atur ketersediaan produk menu outlet Anda.</p>
+        <p class="subtitle">Manajemen menu sekarang langsung terhubung ke tabel <strong>menus</strong> Supabase agar data kasir, laporan, dan stok tampil sinkron.</p>
       </div>
-      <button class="btn btn-primary" @click="openAdd">+ Tambah Produk</button>
+      <div class="toolbar page-header-actions">
+        <button class="btn btn-secondary" @click="load">Refresh</button>
+        <button class="btn btn-primary" @click="openAdd">+ Tambah Menu</button>
+      </div>
     </section>
+
+    <div class="grid grid-3">
+      <article class="kpi-card">
+        <h3>Total menu</h3>
+        <div class="value">{{ totalMenus }}</div>
+        <div class="hint">Seluruh item yang terdaftar di outlet aktif</div>
+      </article>
+      <article class="kpi-card">
+        <h3>Tersedia</h3>
+        <div class="value">{{ availableMenus }}</div>
+        <div class="hint">Menu siap dijual di kasir</div>
+      </article>
+      <article class="kpi-card">
+        <h3>Habis / nonaktif</h3>
+        <div class="value">{{ unavailableMenus }}</div>
+        <div class="hint">Perlu dicek ulang sebelum jam sibuk</div>
+      </article>
+    </div>
 
     <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
     <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
-    <!-- Form tambah/edit -->
-    <div v-if="showForm" class="card stack" style="margin-bottom:1rem;">
-      <h2 style="margin:0">{{ editingProduct ? 'Edit Produk' : 'Tambah Produk Baru' }}</h2>
-      <div class="stack" style="gap:8px;">
-        <label class="field-label">Nama Produk *</label>
-        <input v-model="form.name" class="input" placeholder="Contoh: Nasi Goreng" />
-      </div>
-      <div class="stack" style="gap:8px;">
-        <label class="field-label">Harga (Rp) *</label>
-        <input v-model.number="form.price" class="input" type="number" min="0" placeholder="15000" />
-      </div>
-      <div class="stack" style="gap:8px;">
-        <label class="field-label">Kategori</label>
-        <select v-model="form.category_id" class="input">
-          <option value="">-- Tanpa Kategori --</option>
-          <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-        </select>
-      </div>
-      <div class="stack" style="gap:8px;">
-        <label class="field-label">Deskripsi</label>
-        <input v-model="form.description" class="input" placeholder="Opsional" />
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <input v-model="form.is_available" type="checkbox" id="is_available" />
-        <label for="is_available" class="field-label" style="margin:0">Tersedia</label>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary" :disabled="saving" @click="saveProduct">
-          {{ saving ? 'Menyimpan...' : 'Simpan' }}
-        </button>
-        <button class="btn btn-secondary" @click="resetForm">Batal</button>
-      </div>
-    </div>
+    <section class="card stack">
+      <div class="catalogue-toolbar">
+        <div class="search-field-wrap">
+          <span class="search-icon">⌕</span>
+          <input v-model="search" class="input search-field" placeholder="Cari nama menu, kategori, atau deskripsi..." />
+        </div>
 
-    <!-- Daftar produk -->
-    <div class="card">
-      <div v-if="loading" class="empty-state">Memuat produk...</div>
-      <div v-else-if="!products.length" class="empty-state">
-        Belum ada produk. Tap "+ Tambah Produk" untuk mulai.
+        <div class="chip-group product-filter-group">
+          <button class="chip" :class="{ active: statusFilter === 'all' }" @click="statusFilter = 'all'">Semua</button>
+          <button class="chip" :class="{ active: statusFilter === 'available' }" @click="statusFilter = 'available'">Tersedia</button>
+          <button class="chip" :class="{ active: statusFilter === 'unavailable' }" @click="statusFilter = 'unavailable'">Habis</button>
+        </div>
       </div>
-      <div v-else class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Nama</th>
-              <th>Harga</th>
-              <th>Kategori</th>
-              <th>Status</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="product in products" :key="product.id">
-              <td>{{ product.name }}</td>
-              <td>{{ formatCurrency(product.price) }}</td>
-              <td>{{ categories.find(c => c.id === product.category_id)?.name || '-' }}</td>
-              <td>
-                <span
-                  class="badge"
-                  :class="product.is_available ? 'badge-success' : 'badge-soft'"
-                  style="cursor:pointer"
-                  @click="toggleAvailable(product)"
-                >
-                  {{ product.is_available ? 'Tersedia' : 'Habis' }}
-                </span>
-              </td>
-              <td>
-                <div style="display:flex;gap:4px;">
-                  <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" @click="openEdit(product)">Edit</button>
-                  <button class="btn btn-danger" style="padding:4px 8px;font-size:12px" @click="deleteProduct(product.id)">Hapus</button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+
+      <div v-if="showForm" class="inline-editor-card stack">
+        <div class="section-title">
+          <div>
+            <h2 style="margin:0">{{ editingMenu ? 'Edit menu' : 'Tambah menu baru' }}</h2>
+            <p class="subtitle">Struktur field disesuaikan dengan schema database yang aktif, tanpa mengubah alur bisnis kasir.</p>
+          </div>
+          <button class="btn btn-secondary" @click="resetForm">Tutup</button>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="stack" style="gap:8px;">
+            <label class="field-label">Nama menu *</label>
+            <input v-model="form.name" class="input" placeholder="Contoh: Teh Tarik" />
+          </div>
+          <div class="stack" style="gap:8px;">
+            <label class="field-label">Kategori</label>
+            <select v-model="form.category_id" class="select">
+              <option value="">Tanpa kategori</option>
+              <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="stack" style="gap:8px;">
+            <label class="field-label">Harga jual *</label>
+            <input v-model.number="form.price" class="input" type="number" min="0" placeholder="15000" />
+          </div>
+          <div class="stack" style="gap:8px;">
+            <label class="field-label">Harga modal</label>
+            <input v-model.number="form.cost_price" class="input" type="number" min="0" placeholder="7000" />
+          </div>
+        </div>
+
+        <div class="stack" style="gap:8px;">
+          <label class="field-label">Deskripsi</label>
+          <textarea v-model="form.description" class="textarea" placeholder="Tambahkan catatan singkat untuk tim kasir atau dapur"></textarea>
+        </div>
+
+        <label class="toggle-field">
+          <input v-model="form.is_available" type="checkbox" />
+          <span>Menu tersedia untuk dijual</span>
+        </label>
+
+        <div class="toolbar form-actions-row">
+          <button class="btn btn-primary" :disabled="saving" @click="saveMenu">
+            {{ saving ? 'Menyimpan...' : editingMenu ? 'Simpan perubahan' : 'Simpan menu' }}
+          </button>
+          <button class="btn btn-secondary" @click="resetForm">Batal</button>
+        </div>
       </div>
-    </div>
+
+      <div v-if="loading" class="empty-state">Memuat daftar menu...</div>
+      <div v-else-if="!filteredMenus.length" class="empty-state">Belum ada menu yang cocok dengan filter saat ini.</div>
+
+      <div v-else class="management-card-list">
+        <article v-for="menu in filteredMenus" :key="menu.id" class="management-card">
+          <div class="management-card-top">
+            <div>
+              <h3>{{ menu.name }}</h3>
+              <p class="muted small">{{ getCategoryName(menu) }} · Modal {{ formatCurrency(menu.cost_price) }}</p>
+            </div>
+            <span class="badge" :class="menu.is_available ? 'badge-success' : 'badge-danger'">
+              {{ menu.is_available ? 'Tersedia' : 'Habis' }}
+            </span>
+          </div>
+
+          <p class="management-card-description">{{ menu.description || 'Belum ada deskripsi menu.' }}</p>
+
+          <div class="management-card-stats">
+            <div>
+              <span class="muted small">Harga jual</span>
+              <strong>{{ formatCurrency(menu.price) }}</strong>
+            </div>
+            <div>
+              <span class="muted small">Harga modal</span>
+              <strong>{{ formatCurrency(menu.cost_price) }}</strong>
+            </div>
+          </div>
+
+          <div class="toolbar form-actions-row">
+            <button class="btn btn-secondary" @click="openEdit(menu)">Edit</button>
+            <button class="btn btn-dark" @click="toggleAvailable(menu)">
+              {{ menu.is_available ? 'Tandai habis' : 'Aktifkan' }}
+            </button>
+            <button class="btn btn-danger" @click="deleteMenu(menu.id)">Hapus</button>
+          </div>
+        </article>
+      </div>
+    </section>
   </div>
 </template>
