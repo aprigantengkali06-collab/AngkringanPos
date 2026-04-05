@@ -147,14 +147,16 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
 <template>
   <div class="page">
-    <section class="section-title">
-      <div>
-        <h1 class="title">Kategori Menu</h1>
-        <p class="subtitle">Atur kelompok produk agar kasir cepat mencari menu dan laporan lebih rapi, sekarang dengan layout yang lebih nyaman di mobile.</p>
-      </div>
-      <div class="toolbar page-header-actions">
-        <button class="btn btn-secondary" :disabled="loading" @click="load">{{ loading ? 'Memuat...' : 'Refresh' }}</button>
-        <button class="btn btn-primary" @click="openAdd">Tambah kategori</button>
+    <section class="page-hero">
+      <div class="page-hero-top">
+        <div>
+          <p class="eyebrow">Manajemen</p>
+          <h1 class="page-hero-title">Kategori Menu</h1>
+        </div>
+        <div class="toolbar page-header-actions">
+          <button class="btn btn-secondary" :disabled="loading" @click="load">{{ loading ? 'Memuat...' : 'Refresh' }}</button>
+          <button class="btn btn-primary" @click="openAdd">Tambah kategori</button>
+        </div>
       </div>
     </section>
 
