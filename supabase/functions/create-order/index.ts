@@ -73,16 +73,16 @@ Deno.serve(async (req) => {
 
     const normalizedItems = items.map((item: any) => ({
       menu_id: item.menu_id || null,
-      item_name: String(item.item_name || '').trim(),
-      qty: Number(item.qty || 0),
-      unit_price: Number(item.unit_price || 0),
+      product_name: String(item.item_name || item.name || '').trim(),
+      quantity: Number(item.qty || 0),
+      product_price: Number(item.unit_price || item.price || 0),
       cost_price: Number(item.cost_price || 0),
       discount_amount: Number(item.discount_amount || 0),
-      subtotal: Number(item.qty || 0) * Number(item.unit_price || 0) - Number(item.discount_amount || 0),
+      subtotal: Number(item.qty || 0) * Number(item.unit_price || item.price || 0) - Number(item.discount_amount || 0),
       notes: item.notes ? String(item.notes).trim() : null,
     }))
 
-    if (normalizedItems.some((item) => !item.item_name || item.qty <= 0 || item.unit_price < 0 || item.subtotal < 0)) {
+    if (normalizedItems.some((item) => !item.product_name || item.quantity <= 0 || item.product_price < 0 || item.subtotal < 0)) {
       return json({ ok: false, error: 'Ada item transaksi yang tidak valid.' }, 400)
     }
 
