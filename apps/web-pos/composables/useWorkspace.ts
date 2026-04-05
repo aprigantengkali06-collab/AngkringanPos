@@ -21,6 +21,20 @@ interface OutletMembershipRow {
   outlets: OutletRow | OutletRow[] | null
 }
 
+const shouldFallbackToRpc = (message: string) => {
+  const normalized = String(message || '').toLowerCase()
+  return [
+    'edge function',
+    'failed to send a request',
+    'fetch failed',
+    'failed to fetch',
+    'functionsfetcherror',
+    'networkerror',
+    'non-2xx status code',
+    'cors'
+  ].some((keyword) => normalized.includes(keyword))
+}
+
 export const useWorkspace = () => {
   const { $supabase } = useNuxtApp()
   const supabase = $supabase as any
@@ -82,6 +96,24 @@ export const useWorkspace = () => {
     persistOutlet(outletId)
   }
 
+  const runBootstrapRepair = async () => {
+    try {
+      const { error: invokeError } = await supabase.functions.invoke('bootstrap-user', { body: {} })
+      if (invokeError && !shouldFallbackToRpc(invokeError.message || '')) {
+        throw invokeError
+      }
+    } catch (invokeError: any) {
+      if (!shouldFallbackToRpc(invokeError?.message || '')) {
+        console.warn('bootstrap-user invoke warning', invokeError)
+      }
+    }
+
+    const { error: rpcError } = await supabase.rpc('bootstrap_workspace')
+    if (rpcError && !/function .*bootstrap_workspace/i.test(rpcError.message || '')) {
+      throw rpcError
+    }
+  }
+
   const bootstrap = async (force = false) => {
     if (loading.value) return
     if (initialized.value && !force) return
@@ -99,10 +131,7 @@ export const useWorkspace = () => {
         return
       }
 
-      // best effort edge function call
-      try {
-        await supabase.functions.invoke('bootstrap-user', { body: {} })
-      } catch {}
+      await runBootstrapRepair()
 
       const userId = sessionData.session.user.id
 
@@ -126,14 +155,13 @@ export const useWorkspace = () => {
         .map((row: any) => normalizeOutlet(row as unknown as OutletMembershipRow))
         .filter(Boolean) as OutletRow[]
 
-      // auto select outlet
       const savedId = getSavedOutletId()
       const chosen = outlets.value.find((o) => o.id === savedId) || outlets.value[0] || null
       activeOutletId.value = chosen?.id || ''
       if (activeOutletId.value) persistOutlet(activeOutletId.value)
 
       if (!outlets.value.length) {
-        error.value = 'Akun belum terhubung ke outlet. Hubungi owner.'
+        error.value = 'Akun belum terhubung ke outlet. Jalankan SQL bootstrap dan hubungkan user ke outlet.'
       }
     } catch (err: any) {
       console.error('workspace bootstrap error', err)
