@@ -37,11 +37,22 @@ export const orderService = {
     const supabase = useSupabaseClient()
     const { data, error } = await supabase
       .from('orders')
-      .select('id, order_no, customer_name, order_type, payment_method, status, subtotal, discount_amount, total, paid_amount, change_amount, notes, created_at, paid_at, order_items(id, item_name, qty, unit_price, subtotal, notes)')
+      .select('id, order_no, customer_name, order_type, payment_method, status, subtotal, discount_amount, total, paid_amount, change_amount, notes, created_at, paid_at, order_items(id, product_name, quantity, product_price, cost_price, discount_amount, subtotal, notes)')
       .eq('id', orderId)
       .single()
 
     if (error) throw error
+
+    // normalize column names for display
+    if (data?.order_items) {
+      (data as any).order_items = (data as any).order_items.map((item: any) => ({
+        ...item,
+        item_name: item.product_name || '-',
+        qty: item.quantity || 0,
+        unit_price: item.product_price || 0,
+      }))
+    }
+
     return data
   }
 }
