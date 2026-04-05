@@ -39,18 +39,22 @@ const navItems = computed(() => {
 })
 
 const bottomNavItems = computed(() => {
-  const items = [
+  if (canManage.value) {
+    return [
+      { to: '/pos', label: 'Kasir', icon: 'KS' },
+      { to: '/products', label: 'Produk', icon: 'PR' },
+      { to: '/categories', label: 'Kategori', icon: 'KT' },
+      { to: '/shifts', label: 'Shift', icon: 'SF' },
+      { to: '/orders', label: 'Transaksi', icon: 'TR' }
+    ]
+  }
+  return [
     { to: '/pos', label: 'Kasir', icon: 'KS' },
     { to: '/orders', label: 'Transaksi', icon: 'TR' },
     { to: '/reports/daily', label: 'Laporan', icon: 'LP' },
-    canManage.value
-      ? { to: '/products', label: 'Produk', icon: 'PR' }
-      : { to: '/shifts', label: 'Shift', icon: 'SF' },
+    { to: '/expenses', label: 'Pengeluaran', icon: 'PG' },
     { to: '/shifts', label: 'Shift', icon: 'SF' }
   ]
-
-  const unique = new Map(items.map((item) => [item.to, item]))
-  return Array.from(unique.values()).slice(0, 5)
 })
 
 const showShell = computed(() => route.path !== '/login')
