@@ -54,7 +54,7 @@ const errorMessage = ref('')
 const showCartSheet = ref(false)
 const showSuccessSheet = ref(false)
 const lastOrder = ref<any | null>(null)
-const viewMode = ref<'list' | 'grid'>('list')
+const viewMode = ref<'list' | 'grid'>('grid')
 
 // Order detail modal
 const selectedOrder = ref<any | null>(null)
@@ -841,7 +841,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 .product-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .product-grid-card {
