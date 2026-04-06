@@ -97,20 +97,34 @@ watch([() => workspace.activeOutletId.value, date], async () => {
             <p class="subtitle">Semua transaksi paid yang masuk pada tanggal tersebut.</p>
           </div>
           <div v-if="!orders.length" class="empty-state">Belum ada transaksi paid pada tanggal ini.</div>
-          <div v-else class="table-wrap">
-            <table class="table">
-              <thead><tr><th>Order</th><th>Pelanggan</th><th>Metode</th><th>Waktu</th><th>Total</th></tr></thead>
-              <tbody>
-                <tr v-for="order in orders" :key="order.id">
-                  <td><strong>{{ order.order_no }}</strong></td>
-                  <td>{{ order.customer_name || 'Umum' }}</td>
-                  <td>{{ order.payment_method }}</td>
-                  <td>{{ new Date(order.paid_at).toLocaleString('id-ID') }}</td>
-                  <td><strong>{{ formatCurrency(order.total) }}</strong></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <template v-else>
+            <div class="table-wrap desktop-table-only">
+              <table class="table">
+                <thead><tr><th>Order</th><th>Pelanggan</th><th>Metode</th><th>Waktu</th><th>Total</th></tr></thead>
+                <tbody>
+                  <tr v-for="order in orders" :key="order.id">
+                    <td><strong>{{ order.order_no }}</strong></td>
+                    <td>{{ order.customer_name || 'Umum' }}</td>
+                    <td>{{ order.payment_method }}</td>
+                    <td>{{ new Date(order.paid_at).toLocaleString('id-ID') }}</td>
+                    <td><strong>{{ formatCurrency(order.total) }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="management-card-list mobile-card-only">
+              <article v-for="order in orders" :key="order.id" class="management-card compact-card">
+                <div class="management-card-top">
+                  <div style="min-width:0;">
+                    <h3 style="font-size:13px; word-break:break-all;">{{ order.order_no }}</h3>
+                    <p class="management-card-description">{{ order.customer_name || 'Umum' }} · {{ order.payment_method }}</p>
+                  </div>
+                  <strong style="white-space:nowrap; flex-shrink:0;">{{ formatCurrency(order.total) }}</strong>
+                </div>
+                <div class="muted small">{{ new Date(order.paid_at).toLocaleString('id-ID') }}</div>
+              </article>
+            </div>
+          </template>
         </section>
 
         <section class="card stack">
@@ -119,19 +133,33 @@ watch([() => workspace.activeOutletId.value, date], async () => {
             <p class="subtitle">Pastikan semua biaya tercatat agar angka kas sesuai kenyataan.</p>
           </div>
           <div v-if="!expenses.length" class="empty-state">Tidak ada pengeluaran pada tanggal ini.</div>
-          <div v-else class="table-wrap">
-            <table class="table">
-              <thead><tr><th>Kategori</th><th>Deskripsi</th><th>Waktu</th><th>Nominal</th></tr></thead>
-              <tbody>
-                <tr v-for="expense in expenses" :key="expense.id">
-                  <td><strong>{{ expense.category }}</strong></td>
-                  <td>{{ expense.description }}</td>
-                  <td>{{ new Date(expense.spent_at).toLocaleString('id-ID') }}</td>
-                  <td><strong>{{ formatCurrency(expense.amount) }}</strong></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <template v-else>
+            <div class="table-wrap desktop-table-only">
+              <table class="table">
+                <thead><tr><th>Kategori</th><th>Deskripsi</th><th>Waktu</th><th>Nominal</th></tr></thead>
+                <tbody>
+                  <tr v-for="expense in expenses" :key="expense.id">
+                    <td><strong>{{ expense.category }}</strong></td>
+                    <td>{{ expense.description }}</td>
+                    <td>{{ new Date(expense.spent_at).toLocaleString('id-ID') }}</td>
+                    <td><strong>{{ formatCurrency(expense.amount) }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="management-card-list mobile-card-only">
+              <article v-for="expense in expenses" :key="expense.id" class="management-card compact-card">
+                <div class="management-card-top">
+                  <div>
+                    <h3 style="font-size:14px;">{{ expense.category }}</h3>
+                    <p class="management-card-description">{{ expense.description || '-' }}</p>
+                  </div>
+                  <strong style="white-space:nowrap; flex-shrink:0;">{{ formatCurrency(expense.amount) }}</strong>
+                </div>
+                <div class="muted small">{{ new Date(expense.spent_at).toLocaleString('id-ID') }}</div>
+              </article>
+            </div>
+          </template>
         </section>
       </div>
     </template>
