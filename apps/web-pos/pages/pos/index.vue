@@ -91,6 +91,14 @@ const openOrderDetail = async (order: any) => {
 
 const closeOrderDetail = () => { selectedOrder.value = null }
 
+const isOpenOrder = (order: any) => order?.status === 'open' || (!order?.payment_method && order?.status !== 'paid')
+
+const payOrder = (order: any) => {
+  closeOrderDetail()
+  navigateTo(`/tagihan?pay=${order.id}`)
+}
+
+
 const printReceipt = async () => {
   if (!selectedOrder.value) return
   printingReceipt.value = true
@@ -586,11 +594,15 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           v-for="order in todaySales"
           :key="order.id"
           class="today-order-item"
+          :class="{ 'today-order-unpaid': isOpenOrder(order) }"
           @click="openOrderDetail(order)"
         >
           <div class="today-order-left">
-            <span class="today-order-id">{{ shortId(order.id) }}</span>
-            <span class="today-order-meta">{{ order.customer_name || 'Umum' }} · {{ order.payment_method }}</span>
+            <div class="today-order-id-row">
+              <span class="today-order-id">{{ shortId(order.id) }}</span>
+              <span v-if="isOpenOrder(order)" class="today-order-unpaid-badge">Belum Lunas</span>
+            </div>
+            <span class="today-order-meta">{{ order.customer_name || 'Umum' }} · {{ order.payment_method || 'open tab' }}</span>
           </div>
           <strong class="today-order-total">{{ formatCurrency(order.total) }}</strong>
         </button>
@@ -704,8 +716,15 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           </div>
 
           <!-- Actions -->
-          <div class="odm-actions">
+          <div class="odm-actions" :class="{ 'odm-actions-3': isOpenOrder(selectedOrder) }">
             <button class="btn btn-secondary" @click="closeOrderDetail">← Kembali</button>
+            <button
+              v-if="isOpenOrder(selectedOrder)"
+              class="btn btn-primary"
+              @click="payOrder(selectedOrder)"
+            >
+              💳 Bayar Pesanan
+            </button>
             <button class="btn btn-dark" :disabled="printingReceipt" @click="printReceipt">
               <span v-if="printingReceipt">Mencetak...</span>
               <span v-else>🖨️ Cetak Struk</span>
@@ -891,6 +910,47 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 }
 
 /* === TODAY ORDER LIST === */
+/* === UNPAID BADGE & 3-COL ACTIONS === */
+.today-order-id-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.today-order-unpaid-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.today-order-unpaid {
+  border-color: #fecaca !important;
+  background: #fff5f5 !important;
+}
+.today-order-unpaid:hover {
+  border-color: #dc2626 !important;
+  background: #fee2e2 !important;
+}
+
+.odm-actions-3 {
+  grid-template-columns: 1fr 1.2fr 1fr !important;
+}
+
+/* === UNPAID BADGE & 3-COL ACTIONS === */
+.today-order-id-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .today-order-list {
   display: flex;
   flex-direction: column;
