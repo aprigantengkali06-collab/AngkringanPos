@@ -1464,3 +1464,134 @@ img { display: block; max-width: 100%; }
     padding-bottom: max(32px, env(safe-area-inset-bottom, 32px));
   }
 }
+
+/* ===== LANDSCAPE MOBILE OPTIMIZATION ===== */
+@media (max-height: 500px) and (orientation: landscape) {
+
+  /* Sidebar jadi lebih compact */
+  :root { --sidebar-w: 200px; }
+
+  /* Bottom nav → pindah ke kiri jadi side nav */
+  .mobile-bottom-nav.mobile-only {
+    display: flex !important;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    right: auto;
+    width: 64px;
+    border-top: none;
+    border-right: 1px solid var(--line);
+    padding: calc(env(safe-area-inset-top, 8px) + 8px) 0 calc(env(safe-area-inset-bottom, 8px) + 8px);
+    z-index: 45;
+    grid-template-columns: none;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .bottom-nav-item {
+    flex: 0 0 auto;
+    width: 64px;
+    padding: 10px 4px;
+    gap: 2px;
+  }
+
+  .bottom-nav-label {
+    font-size: 9px;
+  }
+
+  /* Main content geser kanan supaya tidak ketutup side nav */
+  .app-main {
+    margin-left: 64px;
+  }
+
+  /* Kurangi padding content */
+  .content-shell {
+    padding: 10px 12px 10px 12px !important;
+  }
+
+  /* Topbar lebih tipis */
+  .topbar {
+    padding: 8px 12px;
+  }
+
+  /* Hamburger tetap tampil tapi posisi sesuai */
+  .hamburger {
+    display: flex !important;
+  }
+
+  /* POS layout: katalog + panel berdampingan */
+  .pos-layout {
+    grid-template-columns: minmax(0, 1fr) 280px !important;
+    gap: 8px;
+    height: calc(100dvh - 48px);
+    overflow: hidden;
+  }
+
+  .pos-catalogue-card {
+    overflow-y: auto;
+    height: 100%;
+  }
+
+  /* Panel order tidak lagi slide dari bawah, tampil langsung */
+  .pos-order-panel {
+    position: static !important;
+    transform: none !important;
+    max-height: 100%;
+    overflow-y: auto;
+    border-radius: var(--r-lg) !important;
+    box-shadow: var(--shadow) !important;
+  }
+
+  /* Kategori scroll lebih compact */
+  .category-scroll {
+    gap: 6px;
+    padding-bottom: 8px;
+  }
+
+  .chip { font-size: 11px; padding: 5px 10px; }
+
+  /* KPI grid 4 kolom di landscape */
+  .kpi-grid { grid-template-columns: repeat(4, 1fr) !important; }
+  .grid-4   { grid-template-columns: repeat(4, 1fr) !important; }
+  .grid-3   { grid-template-columns: repeat(3, 1fr) !important; }
+
+  /* Card lebih compact */
+  .card { padding: 12px; }
+  .kpi-card { padding: 12px 14px; }
+  .kpi-card .value { font-size: 18px; }
+
+  /* Title lebih kecil */
+  .title { font-size: 18px; }
+  .subtitle { font-size: 12px; }
+
+  /* Section title compact */
+  .section-title { padding-bottom: 10px; gap: 8px; }
+
+  /* Input lebih compact */
+  .input, .select, .textarea {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* Tombol lebih compact */
+  .btn { padding: 8px 14px; font-size: 13px; }
+  .btn-lg { padding: 11px 18px; font-size: 14px; }
+
+  /* Produk row lebih compact */
+  .product-row { gap: 8px; }
+
+  /* Mobile card hanya tampil di portrait */
+  .desktop-table-only { display: block !important; }
+  .mobile-card-only { display: none !important; }
+
+  /* Sidebar overlay landscape */
+  .app-sidebar {
+    width: 200px;
+    padding-bottom: 8px;
+  }
+
+  /* Sembunyikan topbar outlet info agar lebih lega */
+  .topbar .outlet-name { font-size: 12px; }
+}
