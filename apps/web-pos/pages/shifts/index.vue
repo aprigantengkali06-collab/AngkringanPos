@@ -19,6 +19,13 @@ interface ShiftRow {
   notes: string | null
 }
 
+interface ShiftStats {
+  omzet: number
+  pengeluaran: number
+  omzetBersih: number
+  loading: boolean
+}
+
 const loading = ref(false)
 const opening = ref(false)
 const closing = ref(false)
@@ -28,6 +35,7 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const closeCash = ref<number | null>(null)
 const closeNotes = ref('')
+const shiftStats = ref<Record<string, ShiftStats>>({})
 
 // Kalkulasi otomatis kas aktual
 const expectedCashDetail = ref({ cashSales: 0, expenses: 0, expectedTotal: 0 })
@@ -55,7 +63,46 @@ const calcExpectedCash = async (shift: ShiftRow) => {
   }
 }
 
-const load = async () => {
+const fetchShiftStats = async (shiftList: ShiftRow[]) => {
+  if (!shiftList.length) return
+
+  for (const shift of shiftList) {
+    shiftStats.value[shift.id] = { omzet: 0, pengeluaran: 0, omzetBersih: 0, loading: true }
+  }
+
+  try {
+    const shiftIds = shiftList.map(s => s.id)
+    const outletId = shiftList[0].outlet_id
+    const minDate = shiftList.reduce((min, s) => s.opened_at < min ? s.opened_at : min, shiftList[0].opened_at)
+
+    const [{ data: orders }, { data: expenses }] = await Promise.all([
+      supabase.from('orders').select('shift_id, total').in('shift_id', shiftIds).eq('status', 'paid'),
+      supabase.from('expenses').select('amount, spent_at, outlet_id').eq('outlet_id', outletId).gte('spent_at', minDate)
+    ])
+
+    for (const shift of shiftList) {
+      const shiftOrders = (orders || []).filter((o: any) => o.shift_id === shift.id)
+      const omzet = shiftOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0)
+
+      const shiftClose = shift.closed_at || new Date().toISOString()
+      const shiftExpenses = (expenses || []).filter((e: any) => {
+        return e.spent_at >= shift.opened_at && e.spent_at <= shiftClose
+      })
+      const pengeluaran = shiftExpenses.reduce((s: number, e: any) => s + Number(e.amount || 0), 0)
+
+      shiftStats.value[shift.id] = {
+        omzet,
+        pengeluaran,
+        omzetBersih: omzet - pengeluaran,
+        loading: false
+      }
+    }
+  } catch {
+    for (const shift of shiftList) {
+      shiftStats.value[shift.id] = { omzet: 0, pengeluaran: 0, omzetBersih: 0, loading: false }
+    }
+  }
+}
   if (!workspace.activeOutletId.value) return
   loading.value = true
   errorMessage.value = ''
@@ -72,6 +119,7 @@ const load = async () => {
     shifts.value = (data || []) as ShiftRow[]
     activeShift.value = shifts.value.find((item) => item.status === 'open') || null
     if (activeShift.value) await calcExpectedCash(activeShift.value)
+    await fetchShiftStats(shifts.value)
   } catch (error: any) {
     errorMessage.value = error?.message || 'Gagal memuat data shift.'
   } finally {
@@ -303,7 +351,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
               <thead>
                 <tr>
                   <th>Status</th><th>Dibuka</th><th>Ditutup</th>
-<th>Ekspektasi</th><th>Aktual</th><th>Selisih</th>
+                  <th>Omzet</th><th>Pengeluaran</th><th>Omzet Bersih</th>
                 </tr>
               </thead>
               <tbody>
@@ -311,9 +359,11 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
                   <td><span class="badge" :class="shift.status === 'open' ? 'badge-soft' : 'badge-success'">{{ shift.status }}</span></td>
                   <td>{{ formatDateTime(shift.opened_at) }}</td>
                   <td>{{ formatDateTime(shift.closed_at) }}</td>
-                  <td>{{ formatCurrency(shift.expected_cash) }}</td>
-                  <td>{{ formatCurrency(shift.actual_cash) }}</td>
-                  <td>{{ formatCurrency(shift.cash_difference) }}</td>
+                  <td>{{ shiftStats[shift.id]?.loading ? '...' : formatCurrency(shiftStats[shift.id]?.omzet) }}</td>
+                  <td>{{ shiftStats[shift.id]?.loading ? '...' : formatCurrency(shiftStats[shift.id]?.pengeluaran) }}</td>
+                  <td :class="(shiftStats[shift.id]?.omzetBersih ?? 0) >= 0 ? 'text-success' : 'text-danger'">
+                    {{ shiftStats[shift.id]?.loading ? '...' : formatCurrency(shiftStats[shift.id]?.omzetBersih) }}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -330,16 +380,22 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
               </div>
               <div class="shift-row-stats">
                 <div class="shift-stat">
-                  <span class="summary-label">Ekspektasi</span>
-                  <strong>{{ formatCurrency(shift.expected_cash) }}</strong>
+                  <span class="summary-label">Omzet</span>
+                  <strong class="text-success">
+                    {{ shiftStats[shift.id]?.loading ? '...' : formatCurrency(shiftStats[shift.id]?.omzet) }}
+                  </strong>
                 </div>
                 <div class="shift-stat">
-                  <span class="summary-label">Aktual</span>
-                  <strong>{{ formatCurrency(shift.actual_cash) }}</strong>
+                  <span class="summary-label">Pengeluaran</span>
+                  <strong class="text-danger">
+                    {{ shiftStats[shift.id]?.loading ? '...' : formatCurrency(shiftStats[shift.id]?.pengeluaran) }}
+                  </strong>
                 </div>
-                <div class="shift-stat">
-                  <span class="summary-label">Selisih</span>
-                  <strong>{{ formatCurrency(shift.cash_difference) }}</strong>
+                <div class="shift-stat shift-stat-full">
+                  <span class="summary-label">Omzet Bersih</span>
+                  <strong :class="(shiftStats[shift.id]?.omzetBersih ?? 0) >= 0 ? 'text-primary-bold' : 'text-danger'">
+                    {{ shiftStats[shift.id]?.loading ? '...' : formatCurrency(shiftStats[shift.id]?.omzetBersih) }}
+                  </strong>
                 </div>
               </div>
               <p v-if="shift.closed_at" class="muted small" style="margin-top:4px;">
@@ -447,6 +503,16 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
+.shift-stat-full {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
 .shift-stat { display: grid; gap: 2px; }
 .shift-stat strong { font-size: 13px; }
+
+.text-success { color: #16a34a !important; }
+.text-danger { color: #dc2626 !important; }
+.text-primary-bold { color: var(--primary, #e07b2e); font-weight: 700; font-size: 14px !important; }
+.text-success-bold { color: #16a34a; font-weight: 700; font-size: 14px !important; }
 </style>
