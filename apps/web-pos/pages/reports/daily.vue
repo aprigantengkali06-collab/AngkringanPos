@@ -70,20 +70,15 @@ const load = async () => {
     orders.value = orderRes.data || []
     expenses.value = expenseRes.data || []
 
-    // Fetch HPP dari order_items (cost_price × qty per item per order)
-    if (orders.value.length) {
-      const orderIds = orders.value.map(o => o.id)
-      const { data: items } = await supabase
-        .from('order_items')
-        .select('cost_price, qty, quantity, unit_cost')
-        .in('order_id', orderIds)
+    // Fetch HPP dari vw_daily_sales_summary (lebih akurat)
+    const { data: summary } = await supabase
+      .from('vw_daily_sales_summary')
+      .select('cogs')
+      .eq('outlet_id', workspace.activeOutletId.value)
+      .eq('business_date', date.value)
+      .maybeSingle()
 
-      cogsTotal.value = (items || []).reduce((s: number, item: any) => {
-        const cost = Number(item.cost_price || item.unit_cost || 0)
-        const qty  = Number(item.quantity || item.qty || 0)
-        return s + cost * qty
-      }, 0)
-    }
+    cogsTotal.value = Number(summary?.cogs || 0)
   } catch (error: any) {
     errorMessage.value = error?.message || 'Gagal memuat laporan harian.'
   } finally {
