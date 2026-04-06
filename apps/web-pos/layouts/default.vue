@@ -57,12 +57,11 @@ const bottomNavItems = computed(() => {
     ]
   }
   return [
-    { to: '/pos',           label: 'Kasir',      icon: 'kasir' },
-    { to: '/tagihan',       label: 'Tagihan',    icon: 'tagihan' },
-    { to: '/orders',        label: 'Transaksi',  icon: 'transaksi' },
-    { to: '/reports/daily', label: 'Laporan',    icon: 'laporan' },
-    { to: '/expenses',      label: 'Keluar',     icon: 'pengeluaran' },
-    { to: '/shifts',        label: 'Shift',      icon: 'shift' },
+    { to: '/pos',        label: 'Kasir',     icon: 'kasir' },
+    { to: '/tagihan',    label: 'Tagihan',   icon: 'tagihan' },
+    { to: '/orders',     label: 'Transaksi', icon: 'transaksi' },
+    { to: '/shifts',     label: 'Shift',     icon: 'shift' },
+    { to: '/reports/daily', label: 'Laporan', icon: 'laporan' },
   ]
 })
 
