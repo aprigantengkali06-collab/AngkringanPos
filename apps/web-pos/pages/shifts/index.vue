@@ -103,6 +103,8 @@ const fetchShiftStats = async (shiftList: ShiftRow[]) => {
     }
   }
 }
+
+const load = async () => {
   if (!workspace.activeOutletId.value) return
   loading.value = true
   errorMessage.value = ''
