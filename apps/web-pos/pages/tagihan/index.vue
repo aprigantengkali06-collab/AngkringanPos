@@ -20,7 +20,7 @@ interface TagihanItem {
   paid_amount: number
   notes: string | null
   created_at: string
-  order_items: { item_name: string; qty: number; unit_price: number; subtotal: number }[]
+  order_items: { product_name: string; quantity: number; unit_price: number; subtotal: number }[]
   order_payments: OrderPayment[]
 }
 
@@ -47,7 +47,7 @@ const load = async () => {
   try {
     const { data, err } = await (supabase
       .from('orders')
-      .select('id, order_no, customer_name, order_type, total, paid_amount, notes, created_at, order_items(item_name, qty, unit_price, subtotal), order_payments(id, payment_method, amount, paid_at)')
+      .select('id, order_no, customer_name, order_type, total, paid_amount, notes, created_at, order_items(product_name, quantity, unit_price, subtotal), order_payments(id, payment_method, amount, paid_at)')
       .eq('outlet_id', workspace.activeOutletId.value)
       .eq('status', 'open')
       .order('created_at', { ascending: false }) as any)
@@ -159,9 +159,9 @@ watch(() => workspace.activeOutletId.value, async (v, old) => {
 
         <!-- Item list -->
         <div class="tagihan-items">
-          <div v-for="item in t.order_items" :key="item.item_name + item.qty" class="tagihan-item-row">
-            <span>{{ item.item_name }}</span>
-            <span class="muted small">{{ item.qty }}x {{ formatCurrency(item.unit_price) }}</span>
+          <div v-for="item in t.order_items" :key="item.product_name + item.quantity" class="tagihan-item-row">
+            <span>{{ item.product_name }}</span>
+            <span class="muted small">{{ item.quantity }}x {{ formatCurrency(item.unit_price) }}</span>
             <strong>{{ formatCurrency(item.subtotal) }}</strong>
           </div>
         </div>
