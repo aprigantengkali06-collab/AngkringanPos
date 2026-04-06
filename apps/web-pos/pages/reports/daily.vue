@@ -5,9 +5,9 @@ const supabase = useSupabaseClient()
 const workspace = useWorkspace()
 
 const date = ref(new Date().toISOString().slice(0, 10))
-const summary = ref<any | null>(null)
 const orders = ref<any[]>([])
 const expenses = ref<any[]>([])
+const cogsTotal = ref(0)
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -18,14 +18,15 @@ const printingReceipt = ref(false)
 const showAll = ref(false)
 
 const PREVIEW_LIMIT = 5
+const WIB = '+07:00' // timezone offset WIB
 
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
 const formatDateTime = (value: string) => new Date(value).toLocaleString('id-ID')
 
-// Computed KPIs
-const omzet = computed(() => Number(summary.value?.gross_sales || 0))
-const hpp = computed(() => Number(summary.value?.cogs || 0))
-const pengeluaran = computed(() => Number(summary.value?.expenses_amount || 0))
+// Computed KPIs — dihitung dari raw data (timezone-aware)
+const omzet = computed(() => orders.value.reduce((s, o) => s + Number(o.total || 0), 0))
+const hpp = computed(() => cogsTotal.value)
+const pengeluaran = computed(() => expenses.value.reduce((s, e) => s + Number(e.amount || 0), 0))
 const profit = computed(() => omzet.value - hpp.value - pengeluaran.value)
 
 const visibleOrders = computed(() =>
@@ -38,39 +39,51 @@ const load = async () => {
   loading.value = true
   errorMessage.value = ''
   showAll.value = false
+  cogsTotal.value = 0
+
+  // Pakai WIB offset agar filter tanggal sesuai waktu Indonesia
+  const start = `${date.value}T00:00:00${WIB}`
+  const end   = `${date.value}T23:59:59${WIB}`
 
   try {
-    const [summaryRes, orderRes, expenseRes] = await Promise.all([
-      supabase
-        .from('vw_daily_sales_summary')
-        .select('*')
-        .eq('outlet_id', workspace.activeOutletId.value)
-        .eq('business_date', date.value)
-        .maybeSingle(),
+    const [orderRes, expenseRes] = await Promise.all([
       supabase
         .from('orders')
         .select('id, order_no, customer_name, payment_method, total, paid_at, status')
         .eq('outlet_id', workspace.activeOutletId.value)
-        .gte('paid_at', `${date.value}T00:00:00`)
-        .lte('paid_at', `${date.value}T23:59:59`)
+        .gte('paid_at', start)
+        .lte('paid_at', end)
         .eq('status', 'paid')
         .order('paid_at', { ascending: false }),
       supabase
         .from('expenses')
         .select('id, category, description, amount, spent_at')
         .eq('outlet_id', workspace.activeOutletId.value)
-        .gte('spent_at', `${date.value}T00:00:00`)
-        .lte('spent_at', `${date.value}T23:59:59`)
+        .gte('spent_at', start)
+        .lte('spent_at', end)
         .order('spent_at', { ascending: false })
     ])
 
-    if (summaryRes.error) throw summaryRes.error
     if (orderRes.error) throw orderRes.error
     if (expenseRes.error) throw expenseRes.error
 
-    summary.value = summaryRes.data
     orders.value = orderRes.data || []
     expenses.value = expenseRes.data || []
+
+    // Fetch HPP dari order_items (cost_price × qty per item per order)
+    if (orders.value.length) {
+      const orderIds = orders.value.map(o => o.id)
+      const { data: items } = await supabase
+        .from('order_items')
+        .select('cost_price, qty, quantity, unit_cost')
+        .in('order_id', orderIds)
+
+      cogsTotal.value = (items || []).reduce((s: number, item: any) => {
+        const cost = Number(item.cost_price || item.unit_cost || 0)
+        const qty  = Number(item.qty || item.quantity || 0)
+        return s + cost * qty
+      }, 0)
+    }
   } catch (error: any) {
     errorMessage.value = error?.message || 'Gagal memuat laporan harian.'
   } finally {
