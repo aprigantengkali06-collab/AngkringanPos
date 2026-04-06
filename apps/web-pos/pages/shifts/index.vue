@@ -26,12 +26,34 @@ const shifts = ref<ShiftRow[]>([])
 const activeShift = ref<ShiftRow | null>(null)
 const errorMessage = ref('')
 const successMessage = ref('')
-const openCash = ref(0)
 const closeCash = ref<number | null>(null)
 const closeNotes = ref('')
 
+// Kalkulasi otomatis kas aktual
+const expectedCashDetail = ref({ cashSales: 0, expenses: 0, expectedTotal: 0 })
+const loadingExpected = ref(false)
+
 const formatCurrency = (value: number | null | undefined) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
 const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString('id-ID') : '-'
+
+const calcExpectedCash = async (shift: ShiftRow) => {
+  loadingExpected.value = true
+  try {
+    const [{ data: cashOrders }, { data: expenses }] = await Promise.all([
+      supabase.from('orders').select('total').eq('shift_id', shift.id).eq('payment_method', 'cash').eq('status', 'paid'),
+      supabase.from('expenses').select('amount').eq('outlet_id', shift.outlet_id).gte('spent_at', shift.opened_at)
+    ])
+    const cashSales = (cashOrders || []).reduce((s: number, r: any) => s + Number(r.total || 0), 0)
+    const expTotal  = (expenses    || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0)
+    const expected  = cashSales - expTotal
+    expectedCashDetail.value = { cashSales, expenses: expTotal, expectedTotal: expected }
+    closeCash.value = expected
+  } catch {
+    // gagal hitung, user input manual
+  } finally {
+    loadingExpected.value = false
+  }
+}
 
 const load = async () => {
   if (!workspace.activeOutletId.value) return
@@ -49,6 +71,7 @@ const load = async () => {
     if (error) throw error
     shifts.value = (data || []) as ShiftRow[]
     activeShift.value = shifts.value.find((item) => item.status === 'open') || null
+    if (activeShift.value) await calcExpectedCash(activeShift.value)
   } catch (error: any) {
     errorMessage.value = error?.message || 'Gagal memuat data shift.'
   } finally {
@@ -66,13 +89,12 @@ const openShift = async () => {
     const { error } = await supabase.from('shifts').insert({
       outlet_id: workspace.activeOutletId.value,
       opened_by: workspace.profile.value.id,
-      opening_cash: Number(openCash.value || 0),
+      opening_cash: 0,
       status: 'open'
     })
 
     if (error) throw error
     successMessage.value = 'Shift berhasil dibuka.'
-    openCash.value = 0
     await load()
   } catch (error: any) {
     errorMessage.value = error?.message || 'Gagal membuka shift.'
@@ -161,11 +183,9 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 })
 </script>
 
-
 <template>
   <div class="page">
 
-    <!-- HEADER -->
     <section class="page-hero">
       <div class="page-hero-top">
         <div>
@@ -180,7 +200,6 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       </div>
     </section>
 
-    <!-- KPI 2x2 -->
     <div class="shift-kpi-grid">
       <article class="kpi-card">
         <h3>Shift aktif</h3>
@@ -200,14 +219,13 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       <article class="kpi-card">
         <h3>Rata selisih</h3>
         <div class="value">{{ formatCurrency(averageDifference) }}</div>
-        <div class="hint">Kas awal: {{ formatCurrency(totalOpeningCash) }}</div>
+        <div class="hint">Akumulasi selisih kas</div>
       </article>
     </div>
 
     <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
     <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
-    <!-- KONTEN UTAMA: Stack di mobile, 2 kolom di desktop -->
     <div class="shift-panels">
 
       <!-- SHIFT AKTIF -->
@@ -218,22 +236,40 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           <span v-else class="badge">Tidak ada</span>
         </div>
 
-        <!-- Ada shift aktif: tampilkan info + form tutup -->
         <div v-if="activeShift" class="stack">
+          <!-- Info bar -->
           <div class="shift-info-bar">
             <div class="shift-info-item">
               <span class="summary-label">Dibuka</span>
               <strong>{{ formatDateTime(activeShift.opened_at) }}</strong>
             </div>
-            <div class="shift-info-item">
-              <span class="summary-label">Kas awal</span>
-              <strong>{{ formatCurrency(activeShift.opening_cash) }}</strong>
+          </div>
+
+          <!-- Ringkasan kalkulasi otomatis -->
+          <div class="calc-summary">
+            <p class="summary-label" style="margin-bottom:8px;">
+              {{ loadingExpected ? 'Menghitung...' : 'Kalkulasi otomatis' }}
+            </p>
+            <div class="calc-rows">
+              <div class="calc-row positive">
+                <span>+ Omzet cash</span>
+                <strong>{{ formatCurrency(expectedCashDetail.cashSales) }}</strong>
+              </div>
+              <div class="calc-row negative" v-if="expectedCashDetail.expenses > 0">
+                <span>− Pengeluaran</span>
+                <strong>{{ formatCurrency(expectedCashDetail.expenses) }}</strong>
+              </div>
+              <div class="calc-row total">
+                <span>= Kas di laci</span>
+                <strong>{{ formatCurrency(expectedCashDetail.expectedTotal) }}</strong>
+              </div>
             </div>
           </div>
 
           <div class="stack" style="gap:8px;">
             <label class="field-label">Kas aktual saat tutup shift</label>
-            <input v-model.number="closeCash" class="input" type="number" min="0" placeholder="Masukkan kas fisik yang dihitung" />
+            <input v-model.number="closeCash" class="input" type="number" min="0" placeholder="Terisi otomatis, edit jika beda" />
+            <p class="muted small">Terisi otomatis dari omzet cash − pengeluaran. Edit jika ada selisih fisik.</p>
           </div>
 
           <div class="stack" style="gap:8px;">
@@ -246,13 +282,8 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           </button>
         </div>
 
-        <!-- Tidak ada shift: form buka shift -->
         <div v-else class="stack">
           <p class="muted small">Belum ada shift berjalan. Buka shift untuk mulai mencatat transaksi.</p>
-          <div class="stack" style="gap:8px;">
-            <label class="field-label">Kas awal</label>
-            <input v-model.number="openCash" class="input" type="number" min="0" placeholder="Contoh: 100000" />
-          </div>
           <button class="btn btn-primary" :disabled="opening" @click="openShift">
             {{ opening ? 'Membuka shift...' : 'Buka shift baru' }}
           </button>
@@ -267,13 +298,12 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
         <div v-else-if="!shifts.length" class="empty-state">Belum ada data shift.</div>
 
         <template v-else>
-          <!-- Desktop: tabel -->
           <div class="table-wrap desktop-table-only">
             <table class="table">
               <thead>
                 <tr>
                   <th>Status</th><th>Dibuka</th><th>Ditutup</th>
-                  <th>Kas awal</th><th>Ekspektasi</th><th>Aktual</th><th>Selisih</th>
+<th>Ekspektasi</th><th>Aktual</th><th>Selisih</th>
                 </tr>
               </thead>
               <tbody>
@@ -281,7 +311,6 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
                   <td><span class="badge" :class="shift.status === 'open' ? 'badge-soft' : 'badge-success'">{{ shift.status }}</span></td>
                   <td>{{ formatDateTime(shift.opened_at) }}</td>
                   <td>{{ formatDateTime(shift.closed_at) }}</td>
-                  <td>{{ formatCurrency(shift.opening_cash) }}</td>
                   <td>{{ formatCurrency(shift.expected_cash) }}</td>
                   <td>{{ formatCurrency(shift.actual_cash) }}</td>
                   <td>{{ formatCurrency(shift.cash_difference) }}</td>
@@ -290,7 +319,6 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
             </table>
           </div>
 
-          <!-- Mobile: list kompak -->
           <div class="shift-history-list mobile-card-only">
             <article v-for="shift in shifts" :key="shift.id" class="shift-row">
               <div class="shift-row-top">
@@ -300,12 +328,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
                 </div>
                 <span class="badge" :class="shift.status === 'open' ? 'badge-soft' : 'badge-success'">{{ shift.status }}</span>
               </div>
-
               <div class="shift-row-stats">
-                <div class="shift-stat">
-                  <span class="summary-label">Kas awal</span>
-                  <strong>{{ formatCurrency(shift.opening_cash) }}</strong>
-                </div>
                 <div class="shift-stat">
                   <span class="summary-label">Ekspektasi</span>
                   <strong>{{ formatCurrency(shift.expected_cash) }}</strong>
@@ -319,7 +342,6 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
                   <strong>{{ formatCurrency(shift.cash_difference) }}</strong>
                 </div>
               </div>
-
               <p v-if="shift.closed_at" class="muted small" style="margin-top:4px;">
                 Ditutup: {{ formatDateTime(shift.closed_at) }}
               </p>
@@ -333,7 +355,6 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 </template>
 
 <style scoped>
-/* KPI grid: 2x2 di mobile, 4 kolom di desktop */
 .shift-kpi-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -343,20 +364,15 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   .shift-kpi-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
-/* Panels: 1 kolom di mobile, 2 kolom di desktop */
 .shift-panels {
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
 }
 @media (min-width: 768px) {
-  .shift-panels {
-    grid-template-columns: repeat(2, 1fr);
-    align-items: start;
-  }
+  .shift-panels { grid-template-columns: repeat(2, 1fr); align-items: start; }
 }
 
-/* Section header */
 .shift-section-head {
   display: flex;
   align-items: center;
@@ -369,10 +385,9 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   flex: 1;
 }
 
-/* Info bar (dibuka + kas awal) */
 .shift-info-bar {
   display: flex;
-  gap: 16px;
+  gap: 20px;
   flex-wrap: wrap;
   padding: 12px 14px;
   background: var(--bg-soft);
@@ -383,15 +398,35 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   display: grid;
   gap: 2px;
 }
-.shift-info-item strong {
-  font-size: 13px;
-}
+.shift-info-item strong { font-size: 13px; }
 
-/* Riwayat list */
-.shift-history-list {
-  display: grid;
-  gap: 10px;
+/* Kalkulasi otomatis */
+.calc-summary {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 14px;
 }
+.calc-rows { display: grid; gap: 6px; }
+.calc-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.calc-row.positive strong { color: #16a34a; }
+.calc-row.negative strong { color: #dc2626; }
+.calc-row.total {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  margin-top: 2px;
+  font-weight: 700;
+  color: var(--text);
+}
+.calc-row.total strong { font-size: 15px; color: var(--text); }
+
+/* Riwayat */
+.shift-history-list { display: grid; gap: 10px; }
 .shift-row {
   padding: 14px;
   border: 1.5px solid var(--line);
@@ -406,19 +441,12 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   justify-content: space-between;
   gap: 8px;
 }
-.shift-row-label {
-  font-size: 14px;
-}
+.shift-row-label { font-size: 14px; }
 .shift-row-stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
-.shift-stat {
-  display: grid;
-  gap: 2px;
-}
-.shift-stat strong {
-  font-size: 13px;
-}
+.shift-stat { display: grid; gap: 2px; }
+.shift-stat strong { font-size: 13px; }
 </style>
