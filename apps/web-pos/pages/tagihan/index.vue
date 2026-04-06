@@ -247,9 +247,20 @@ const submitPayItems = async () => {
 }
 
 // ─── Lifecycle ────────────────────────────────────────
+const route = useRoute()
+
 onMounted(async () => {
   await workspace.bootstrap()
   await load()
+  // Auto-buka modal bayar jika navigasi dari kasir dengan ?pay=ORDER_ID
+  const payId = route.query.pay as string | undefined
+  if (payId) {
+    const target = tagihans.value.find(t => t.id === payId)
+    if (target) {
+      openDetail(target)
+      initPayMode()
+    }
+  }
 })
 watch(() => workspace.activeOutletId.value, async (v, old) => {
   if (!v || v === old) return
