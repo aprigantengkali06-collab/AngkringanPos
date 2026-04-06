@@ -371,6 +371,15 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     </section>
 
     <div v-if="errorMessage && !showCartSheet" class="alert alert-danger">{{ errorMessage }}</div>
+    <!-- Floating Cart Button (landscape) -->
+    <Teleport to="body">
+      <div v-if="cart.length" class="landscape-fab" @click="showCartSheet = true">
+        <div class="landscape-fab-qty">{{ totalQty }}</div>
+        <div class="landscape-fab-icon">🛒</div>
+        <div class="landscape-fab-total">{{ formatCurrency(subtotal) }}</div>
+      </div>
+    </Teleport>
+
     <div v-if="!workspace.activeShift.value" class="alert alert-warning" style="display:flex;align-items:center;gap:10px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;border-radius:10px;padding:12px 16px;margin-bottom:8px;">
       <span style="font-size:18px;">⚠️</span>
       <span><strong>Shift belum dibuka.</strong> Buka shift terlebih dahulu sebelum mencatat transaksi.</span>
@@ -472,7 +481,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
             <h2 style="margin: 0">Detail Pesanan</h2>
             <p class="subtitle">Pelanggan, tipe order, pembayaran, lalu simpan transaksi.</p>
           </div>
-          <button class="btn btn-secondary mobile-only" @click="showCartSheet = false">Tutup</button>
+          <button class="btn btn-secondary" @click="showCartSheet = false">✕ Tutup</button>
         </div>
 
         <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
@@ -619,14 +628,14 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
       </div>
     </section>
 
-    <div v-if="cart.length" class="mobile-cart-bar mobile-only">
+    <div v-if="cart.length" class="mobile-cart-bar landscape-cart-bar">
       <button class="mobile-cart-button" @click="showCartSheet = true">
         <span>{{ totalQty }} item</span>
         <strong>Bayar {{ formatCurrency(subtotal) }}</strong>
       </button>
     </div>
 
-    <div v-if="showCartSheet" class="mobile-sheet-backdrop mobile-only" @click="showCartSheet = false" />
+    <div v-if="showCartSheet" class="mobile-sheet-backdrop" @click="showCartSheet = false" />
 
     <!-- Order Detail Modal -->
     <div v-if="selectedOrder" class="modal-backdrop" @click="closeOrderDetail">
