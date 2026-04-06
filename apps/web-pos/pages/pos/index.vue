@@ -154,7 +154,7 @@ const totalQty = computed(() => cart.value.reduce((sum, item) => sum + item.qty,
 const effectivePaid = computed(() => paidAmount.value == null || Number.isNaN(paidAmount.value) ? subtotal.value : Number(paidAmount.value))
 const changeAmount = computed(() => Math.max(0, effectivePaid.value - subtotal.value))
 const insufficientPayment = computed(() => paymentMethod.value === 'cash' && effectivePaid.value < subtotal.value)
-const canSubmit = computed(() => Boolean(workspace.activeOutletId.value) && cart.value.length > 0 && !insufficientPayment.value)
+const canSubmit = computed(() => Boolean(workspace.activeOutletId.value) && Boolean(workspace.activeShift.value) && cart.value.length > 0 && !insufficientPayment.value)
 
 const todaySales = computed(() => {
   const today = new Date().toISOString().slice(0, 10)
@@ -256,6 +256,7 @@ const submitOrder = async () => {
 
     const payload = {
       outlet_id: workspace.activeOutletId.value,
+      shift_id: workspace.activeShift.value?.id || null,
       customer_name: customerName.value.trim() || null,
       payment_method: paymentMethod.value,
       order_type: orderType.value,
@@ -331,12 +332,16 @@ const saveOpenOrder = async () => {
 onMounted(async () => {
   await workspace.bootstrap()
   await Promise.all([loadMenus(), loadRecentOrders()])
+  if (workspace.activeOutletId.value) {
+    await workspace.fetchActiveShift(workspace.activeOutletId.value)
+  }
 })
 
 watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   if (!value || value === oldValue) return
   resetForm()
   await Promise.all([loadMenus(), loadRecentOrders()])
+  await workspace.fetchActiveShift(value)
 })
 </script>
 
@@ -366,6 +371,11 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     </section>
 
     <div v-if="errorMessage && !showCartSheet" class="alert alert-danger">{{ errorMessage }}</div>
+    <div v-if="!workspace.activeShift.value" class="alert alert-warning" style="display:flex;align-items:center;gap:10px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;border-radius:10px;padding:12px 16px;margin-bottom:8px;">
+      <span style="font-size:18px;">⚠️</span>
+      <span><strong>Shift belum dibuka.</strong> Buka shift terlebih dahulu sebelum mencatat transaksi.</span>
+      <button class="btn btn-primary" style="margin-left:auto;white-space:nowrap;font-size:12px;padding:6px 12px;" @click="navigateTo('/shifts')">Buka Shift</button>
+    </div>
 
     <div class="pos-layout">
       <section class="card stack pos-catalogue-card">
