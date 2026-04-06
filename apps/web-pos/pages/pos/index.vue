@@ -59,13 +59,29 @@ const viewMode = ref<'list' | 'grid'>('list')
 // Order detail modal
 const selectedOrder = ref<any | null>(null)
 const loadingDetail = ref(false)
+const printingReceipt = ref(false)
+
+const orderTypeLabel: Record<string, { label: string; icon: string; color: string }> = {
+  dine_in:  { label: 'Dine In',      icon: '🍽️', color: '#2563eb' },
+  takeaway: { label: 'Bawa Pulang',  icon: '🛍️', color: '#d97706' },
+  online:   { label: 'Pesan Antar',  icon: '🛵', color: '#16a34a' }
+}
+const paymentLabel: Record<string, { label: string; icon: string }> = {
+  cash:     { label: 'Tunai',    icon: '💵' },
+  transfer: { label: 'Transfer', icon: '🏦' },
+  qris:     { label: 'QRIS',     icon: '📲' }
+}
 
 const openOrderDetail = async (order: any) => {
   selectedOrder.value = { ...order, order_items: null }
   loadingDetail.value = true
   try {
     const detail = await orderService.getOrderDetails(order.id)
-    selectedOrder.value = detail
+    // preserve payment_method from list if detail returns null
+    selectedOrder.value = {
+      ...detail,
+      payment_method: detail.payment_method || order.payment_method
+    }
   } catch {
     // keep basic data
   } finally {
@@ -74,6 +90,22 @@ const openOrderDetail = async (order: any) => {
 }
 
 const closeOrderDetail = () => { selectedOrder.value = null }
+
+const printReceipt = async () => {
+  if (!selectedOrder.value) return
+  printingReceipt.value = true
+  try {
+    const { printerService } = await import('~/services/printer.service')
+    await printerService.printReceipt({
+      order_id: selectedOrder.value.id,
+      outlet_id: workspace.activeOutletId.value
+    })
+  } catch (e: any) {
+    alert(e?.message || 'Gagal mencetak struk. Pastikan printer terhubung.')
+  } finally {
+    printingReceipt.value = false
+  }
+}
 
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
 const shortId = (id: string) => `#${(id || '').slice(-8).toUpperCase()}`
@@ -577,57 +609,107 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     <!-- Order Detail Modal -->
     <div v-if="selectedOrder" class="modal-backdrop" @click="closeOrderDetail">
       <div class="modal-card order-detail-modal" @click.stop>
-        <div class="order-detail-header">
-          <div>
-            <span class="eyebrow">Detail Transaksi</span>
-            <h2 style="margin:4px 0 0; font-size:18px;">{{ shortId(selectedOrder.id) }}</h2>
+
+        <!-- Header -->
+        <div class="odm-header">
+          <div class="odm-header-left">
+            <span class="odm-eyebrow">Detail Transaksi</span>
+            <h2 class="odm-id">{{ shortId(selectedOrder.id) }}</h2>
           </div>
-          <button class="btn btn-secondary btn-sm" @click="closeOrderDetail">✕</button>
+          <button class="odm-close" @click="closeOrderDetail">✕</button>
         </div>
 
-        <div v-if="loadingDetail" class="empty-state">Memuat detail...</div>
+        <!-- Loading -->
+        <div v-if="loadingDetail" class="odm-loading">
+          <span class="odm-spinner"></span>
+          <span class="muted small">Memuat detail...</span>
+        </div>
 
         <template v-else>
-          <div class="order-detail-meta">
-            <div class="order-detail-meta-item">
-              <span class="muted small">Pelanggan</span>
-              <strong>{{ selectedOrder.customer_name || 'Umum' }}</strong>
+          <!-- Meta grid -->
+          <div class="odm-meta-grid">
+            <!-- Pelanggan -->
+            <div class="odm-meta-card">
+              <span class="odm-meta-icon">👤</span>
+              <div>
+                <span class="odm-meta-label">Pelanggan</span>
+                <strong class="odm-meta-value">{{ selectedOrder.customer_name || 'Umum' }}</strong>
+              </div>
             </div>
-            <div class="order-detail-meta-item">
-              <span class="muted small">Metode</span>
-              <strong>{{ selectedOrder.payment_method }}</strong>
+            <!-- Metode -->
+            <div class="odm-meta-card">
+              <span class="odm-meta-icon">{{ paymentLabel[selectedOrder.payment_method]?.icon || '💳' }}</span>
+              <div>
+                <span class="odm-meta-label">Metode</span>
+                <strong class="odm-meta-value">{{ paymentLabel[selectedOrder.payment_method]?.label || selectedOrder.payment_method || '-' }}</strong>
+              </div>
             </div>
-            <div class="order-detail-meta-item">
-              <span class="muted small">Tipe</span>
-              <strong>{{ selectedOrder.order_type || '-' }}</strong>
+            <!-- Tipe -->
+            <div class="odm-meta-card odm-type-card" :style="{ borderColor: orderTypeLabel[selectedOrder.order_type]?.color + '44' || '#e8e8e2', background: orderTypeLabel[selectedOrder.order_type]?.color + '0d' || 'var(--bg-soft)' }">
+              <span class="odm-meta-icon">{{ orderTypeLabel[selectedOrder.order_type]?.icon || '📋' }}</span>
+              <div>
+                <span class="odm-meta-label">Tipe</span>
+                <strong class="odm-meta-value" :style="{ color: orderTypeLabel[selectedOrder.order_type]?.color || 'var(--text)' }">
+                  {{ orderTypeLabel[selectedOrder.order_type]?.label || selectedOrder.order_type || '-' }}
+                </strong>
+              </div>
             </div>
-            <div class="order-detail-meta-item">
-              <span class="muted small">Waktu</span>
-              <strong>{{ new Date(selectedOrder.paid_at || selectedOrder.created_at).toLocaleString('id-ID') }}</strong>
+            <!-- Waktu -->
+            <div class="odm-meta-card">
+              <span class="odm-meta-icon">🕐</span>
+              <div>
+                <span class="odm-meta-label">Waktu</span>
+                <strong class="odm-meta-value odm-time">{{ new Date(selectedOrder.paid_at || selectedOrder.created_at).toLocaleString('id-ID') }}</strong>
+              </div>
             </div>
           </div>
 
-          <div v-if="selectedOrder.order_items?.length" class="order-detail-items">
-            <div class="eyebrow" style="margin-bottom:8px;">Pesanan</div>
-            <div
-              v-for="item in selectedOrder.order_items"
-              :key="item.id"
-              class="order-detail-item-row"
-            >
-              <span class="order-detail-item-qty">{{ item.qty }}×</span>
-              <span class="order-detail-item-name">{{ item.item_name }}</span>
-              <span class="order-detail-item-price">{{ formatCurrency(item.subtotal || item.qty * item.unit_price) }}</span>
+          <!-- Items -->
+          <div v-if="selectedOrder.order_items?.length" class="odm-items">
+            <div class="odm-items-header">
+              <span class="odm-eyebrow">Pesanan</span>
+              <span class="odm-items-count">{{ selectedOrder.order_items.length }} item</span>
+            </div>
+            <div class="odm-item-list">
+              <div v-for="item in selectedOrder.order_items" :key="item.id" class="odm-item-row">
+                <div class="odm-item-qty-badge">{{ item.qty }}×</div>
+                <span class="odm-item-name">{{ item.item_name }}</span>
+                <span class="odm-item-price">{{ formatCurrency(item.subtotal || item.qty * item.unit_price) }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="odm-no-items muted small">Detail item tidak tersedia.</div>
+
+          <!-- Summary -->
+          <div class="odm-summary">
+            <div class="odm-summary-row">
+              <span>Subtotal</span>
+              <span>{{ formatCurrency(selectedOrder.subtotal || selectedOrder.total) }}</span>
+            </div>
+            <div class="odm-summary-row">
+              <span>Dibayar</span>
+              <span>{{ formatCurrency(selectedOrder.paid_amount) }}</span>
+            </div>
+            <div class="odm-summary-divider"></div>
+            <div class="odm-summary-row odm-summary-total">
+              <span>Kembalian</span>
+              <strong>{{ formatCurrency(selectedOrder.change_amount || 0) }}</strong>
             </div>
           </div>
 
-          <div class="order-detail-summary">
-            <div class="summary-row"><span class="muted">Total</span><strong>{{ formatCurrency(selectedOrder.total) }}</strong></div>
-            <div class="summary-row"><span class="muted">Dibayar</span><strong>{{ formatCurrency(selectedOrder.paid_amount) }}</strong></div>
-            <div class="summary-row"><span class="muted">Kembalian</span><strong>{{ formatCurrency(selectedOrder.change_amount || 0) }}</strong></div>
+          <!-- Notes -->
+          <div v-if="selectedOrder.notes" class="odm-notes">
+            <span class="odm-notes-icon">📝</span>
+            <span>{{ selectedOrder.notes }}</span>
           </div>
 
-          <div v-if="selectedOrder.notes" class="order-detail-notes">
-            <span class="muted small">Catatan: </span>{{ selectedOrder.notes }}
+          <!-- Actions -->
+          <div class="odm-actions">
+            <button class="btn btn-secondary" @click="closeOrderDetail">← Kembali</button>
+            <button class="btn btn-dark" :disabled="printingReceipt" @click="printReceipt">
+              <span v-if="printingReceipt">Mencetak...</span>
+              <span v-else>🖨️ Cetak Struk</span>
+            </button>
           </div>
         </template>
       </div>
@@ -869,85 +951,251 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   flex-shrink: 0;
 }
 
-/* === ORDER DETAIL MODAL === */
+/* === ORDER DETAIL MODAL (ODM) === */
 .order-detail-modal {
-  max-width: 420px;
+  max-width: 440px;
   width: 100%;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  max-height: 90dvh;
+  max-height: 92dvh;
   overflow-y: auto;
+  border-radius: 24px;
+  padding: 24px;
 }
 
-.order-detail-header {
+.odm-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
 }
 
-.order-detail-meta {
+.odm-header-left { display: flex; flex-direction: column; gap: 2px; }
+
+.odm-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.odm-id {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--text);
+}
+
+.odm-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--bg-soft);
+  font-size: 14px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.odm-close:hover { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+
+.odm-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  padding: 24px 0;
+  color: var(--muted);
+}
+
+.odm-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: odm-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes odm-spin { to { transform: rotate(360deg); } }
+
+/* Meta grid */
+.odm-meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 8px;
 }
 
-.order-detail-meta-item {
+.odm-meta-card {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px;
+  border-radius: 14px;
   background: var(--bg-soft);
-  border-radius: 10px;
-  border: 1px solid var(--line);
+  border: 1.5px solid var(--line);
 }
 
-.order-detail-items {
-  padding: 14px;
-  border-radius: 12px;
-  background: var(--bg-soft);
-  border: 1px solid var(--line);
-  display: grid;
-  gap: 8px;
+.odm-type-card {
+  transition: background 0.2s, border-color 0.2s;
 }
 
-.order-detail-item-row {
+.odm-meta-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.odm-meta-label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.odm-meta-value {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.odm-time {
+  font-size: 12px !important;
+}
+
+/* Items */
+.odm-items {
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  overflow: hidden;
+}
+
+.odm-items-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.odm-items-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--line);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.odm-item-list { display: flex; flex-direction: column; }
+
+.odm-item-row {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
   gap: 8px;
-  align-items: baseline;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
+.odm-item-row:last-child { border-bottom: none; }
 
-.order-detail-item-qty {
-  font-weight: 700;
-  color: var(--muted);
-  font-size: 13px;
+.odm-item-qty-badge {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.order-detail-item-name {
-  font-weight: 500;
+.odm-item-name {
+  font-weight: 600;
+  color: var(--text);
 }
 
-.order-detail-item-price {
+.odm-item-price {
   font-weight: 700;
+  color: var(--text);
   white-space: nowrap;
 }
 
-.order-detail-summary {
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--bg-soft);
-  border: 1px solid var(--line);
-  display: grid;
-  gap: 8px;
+.odm-no-items {
+  text-align: center;
+  padding: 12px;
 }
 
-.order-detail-notes {
+/* Summary */
+.odm-summary {
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-soft);
+}
+
+.odm-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.odm-summary-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 2px 0;
+}
+
+.odm-summary-total {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.odm-summary-total strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--primary-dark);
+}
+
+/* Notes */
+.odm-notes {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
   font-size: 13px;
   color: var(--text-2);
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--warning-bg);
   border: 1px solid #fde68a;
+  line-height: 1.5;
+}
+
+.odm-notes-icon { flex-shrink: 0; }
+
+/* Actions */
+.odm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
 }
 </style>
