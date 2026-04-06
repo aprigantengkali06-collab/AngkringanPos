@@ -80,7 +80,7 @@ const load = async () => {
 
       cogsTotal.value = (items || []).reduce((s: number, item: any) => {
         const cost = Number(item.cost_price || item.unit_cost || 0)
-        const qty  = Number(item.qty || item.quantity || 0)
+        const qty  = Number(item.quantity || item.qty || 0)
         return s + cost * qty
       }, 0)
     }
