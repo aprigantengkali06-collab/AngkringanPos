@@ -8,7 +8,7 @@ interface OrderPayment {
   id: string
   payment_method: string
   amount: number
-  paid_at: string
+  created_at: string
 }
 
 interface TagihanItem {
@@ -47,7 +47,7 @@ const load = async () => {
   try {
     const { data, error: qErr } = await supabase
       .from('orders')
-      .select('id, order_no, customer_name, order_type, total, paid_amount, notes, created_at, order_items(product_name, quantity, product_price, subtotal), order_payments(id, payment_method, amount, paid_at)')
+      .select('id, order_no, customer_name, order_type, total, paid_amount, notes, created_at, order_items(product_name, quantity, product_price, subtotal), order_payments(id, payment_method, amount, created_at)')
       .eq('outlet_id', workspace.activeOutletId.value)
       .eq('status', 'open')
       .order('created_at', { ascending: false })
@@ -170,7 +170,7 @@ watch(() => workspace.activeOutletId.value, async (v, old) => {
         <div v-if="t.order_payments?.length" class="tagihan-payments">
           <p class="summary-label" style="margin-bottom:6px;">Sudah dibayar</p>
           <div v-for="p in t.order_payments" :key="p.id" class="tagihan-payment-row">
-            <span class="muted small">{{ p.payment_method }} · {{ formatTime(p.paid_at) }}</span>
+            <span class="muted small">{{ p.payment_method }} · {{ formatTime(p.created_at) }}</span>
             <strong class="paid-amount">{{ formatCurrency(p.amount) }}</strong>
           </div>
         </div>
