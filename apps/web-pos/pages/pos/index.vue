@@ -371,13 +371,15 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     </section>
 
     <div v-if="errorMessage && !showCartSheet" class="alert alert-danger">{{ errorMessage }}</div>
-    <!-- Floating Cart Button (landscape) -->
+    <!-- Floating Cart Button (landscape only) -->
     <Teleport to="body">
-      <div v-if="cart.length" class="landscape-fab" @click="showCartSheet = true">
-        <div class="landscape-fab-qty">{{ totalQty }}</div>
-        <div class="landscape-fab-icon">🛒</div>
-        <div class="landscape-fab-total">{{ formatCurrency(subtotal) }}</div>
-      </div>
+      <transition name="fab-pop">
+        <div v-if="cart.length && !showCartSheet" class="landscape-fab" @click="showCartSheet = true">
+          <div class="landscape-fab-qty">{{ totalQty }}</div>
+          <div class="landscape-fab-icon">🛒</div>
+          <div class="landscape-fab-total">Lihat Pesanan · {{ formatCurrency(subtotal) }}</div>
+        </div>
+      </transition>
     </Teleport>
 
     <div v-if="!workspace.activeShift.value" class="alert alert-warning" style="display:flex;align-items:center;gap:10px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;border-radius:10px;padding:12px 16px;margin-bottom:8px;">
