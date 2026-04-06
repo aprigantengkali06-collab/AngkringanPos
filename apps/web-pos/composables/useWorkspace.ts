@@ -46,6 +46,24 @@ export const useWorkspace = () => {
   const profile = useState<WorkspaceProfile | null>('workspace:profile', () => null)
   const outlets = useState<OutletRow[]>('workspace:outlets', () => [])
   const activeOutletId = useState<string>('workspace:activeOutletId', () => '')
+  const activeShift = useState<any>('workspace:activeShift', () => null)
+
+  const fetchActiveShift = async (outletId: string) => {
+    if (!outletId) return
+    try {
+      const { data } = await supabase
+        .from('shifts')
+        .select('id, opened_at, opening_cash, status')
+        .eq('outlet_id', outletId)
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      activeShift.value = data || null
+    } catch {
+      activeShift.value = null
+    }
+  }
 
   const activeOutlet = computed(() => outlets.value.find((item) => item.id === activeOutletId.value) || null)
   const canManage = computed(() => ['owner', 'manager'].includes(profile.value?.role || ''))
@@ -91,9 +109,10 @@ export const useWorkspace = () => {
     error.value = ''
   }
 
-  const switchOutlet = (outletId: string) => {
+  const switchOutlet = async (outletId: string) => {
     activeOutletId.value = outletId
     persistOutlet(outletId)
+    await fetchActiveShift(outletId)
   }
 
   const runBootstrapRepair = async () => {
@@ -158,7 +177,10 @@ export const useWorkspace = () => {
       const savedId = getSavedOutletId()
       const chosen = outlets.value.find((o) => o.id === savedId) || outlets.value[0] || null
       activeOutletId.value = chosen?.id || ''
-      if (activeOutletId.value) persistOutlet(activeOutletId.value)
+      if (activeOutletId.value) {
+        persistOutlet(activeOutletId.value)
+        await fetchActiveShift(activeOutletId.value)
+      }
 
       if (!outlets.value.length) {
         error.value = 'Akun belum terhubung ke outlet. Jalankan SQL bootstrap dan hubungkan user ke outlet.'
@@ -194,6 +216,8 @@ export const useWorkspace = () => {
     bootstrap,
     switchOutlet,
     signOut,
-    reset
+    reset,
+    activeShift,
+    fetchActiveShift
   }
 }
