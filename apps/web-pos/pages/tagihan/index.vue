@@ -45,13 +45,13 @@ const load = async () => {
   loading.value = true
   error.value = ''
   try {
-    const { data, err } = await (supabase
+    const { data, error: qErr } = await supabase
       .from('orders')
       .select('id, order_no, customer_name, order_type, total, paid_amount, notes, created_at, order_items(product_name, quantity, product_price, subtotal), order_payments(id, payment_method, amount, paid_at)')
       .eq('outlet_id', workspace.activeOutletId.value)
       .eq('status', 'open')
-      .order('created_at', { ascending: false }) as any)
-    if (err) throw err
+      .order('created_at', { ascending: false })
+    if (qErr) throw qErr
     tagihans.value = (data || []) as TagihanItem[]
   } catch (e: any) {
     error.value = e?.message || 'Gagal memuat tagihan.'
