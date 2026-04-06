@@ -11,6 +11,7 @@ const {
 // SVG icon paths — stroke-based, viewBox 0 0 20 20
 const icons: Record<string, string> = {
   kasir:       '<rect x="2" y="5" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 9h16M6 13h2M10 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  tagihan:     '<path d="M6 2h8a2 2 0 0 1 2 2v14l-5-3-5 3V4a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 8h4M8 11h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
   transaksi:   '<rect x="4" y="3" width="12" height="15" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M7 8h6M7 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
   laporan:     '<path d="M4 16V8l6-4 6 4v8M4 16h12M8 16v-5h4v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
   pengeluaran: '<circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 7v6M7.5 9l2.5 4 2.5-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -26,6 +27,7 @@ const icons: Record<string, string> = {
 const navItems = computed(() => {
   const base = [
     { to: '/pos',           label: 'Kasir',             icon: 'kasir' },
+    { to: '/tagihan',       label: 'Tagihan Aktif',     icon: 'tagihan' },
     { to: '/orders',        label: 'Riwayat Transaksi', icon: 'transaksi' },
     { to: '/reports/daily', label: 'Laporan',           icon: 'laporan' },
     { to: '/expenses',      label: 'Pengeluaran',       icon: 'pengeluaran' },
@@ -48,14 +50,15 @@ const bottomNavItems = computed(() => {
   if (canManage.value) {
     return [
       { to: '/pos',        label: 'Kasir',     icon: 'kasir' },
+      { to: '/tagihan',    label: 'Tagihan',   icon: 'tagihan' },
       { to: '/products',   label: 'Produk',    icon: 'produk' },
-      { to: '/categories', label: 'Kategori',  icon: 'kategori' },
       { to: '/shifts',     label: 'Shift',     icon: 'shift' },
       { to: '/orders',     label: 'Transaksi', icon: 'transaksi' },
     ]
   }
   return [
     { to: '/pos',           label: 'Kasir',      icon: 'kasir' },
+    { to: '/tagihan',       label: 'Tagihan',    icon: 'tagihan' },
     { to: '/orders',        label: 'Transaksi',  icon: 'transaksi' },
     { to: '/reports/daily', label: 'Laporan',    icon: 'laporan' },
     { to: '/expenses',      label: 'Keluar',     icon: 'pengeluaran' },
