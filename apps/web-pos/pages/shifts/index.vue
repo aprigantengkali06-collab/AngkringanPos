@@ -71,23 +71,39 @@ const fetchShiftStats = async (shiftList: ShiftRow[]) => {
   }
 
   try {
-    const shiftIds = shiftList.map(s => s.id)
     const outletId = shiftList[0].outlet_id
     const minDate = shiftList.reduce((min, s) => s.opened_at < min ? s.opened_at : min, shiftList[0].opened_at)
+    const maxDate = shiftList.reduce((max, s) => {
+      const d = s.closed_at || new Date().toISOString()
+      return d > max ? d : max
+    }, shiftList[0].closed_at || new Date().toISOString())
 
+    // Fetch by time range, bukan shift_id — lebih reliable
     const [{ data: orders }, { data: expenses }] = await Promise.all([
-      supabase.from('orders').select('shift_id, total').in('shift_id', shiftIds).eq('status', 'paid'),
-      supabase.from('expenses').select('amount, spent_at, outlet_id').eq('outlet_id', outletId).gte('spent_at', minDate)
+      supabase.from('orders')
+        .select('paid_at, total')
+        .eq('outlet_id', outletId)
+        .eq('status', 'paid')
+        .gte('paid_at', minDate)
+        .lte('paid_at', maxDate),
+      supabase.from('expenses')
+        .select('amount, spent_at')
+        .eq('outlet_id', outletId)
+        .gte('spent_at', minDate)
+        .lte('spent_at', maxDate)
     ])
 
     for (const shift of shiftList) {
-      const shiftOrders = (orders || []).filter((o: any) => o.shift_id === shift.id)
+      const shiftClose = shift.closed_at || new Date().toISOString()
+
+      const shiftOrders = (orders || []).filter((o: any) =>
+        o.paid_at >= shift.opened_at && o.paid_at <= shiftClose
+      )
       const omzet = shiftOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0)
 
-      const shiftClose = shift.closed_at || new Date().toISOString()
-      const shiftExpenses = (expenses || []).filter((e: any) => {
-        return e.spent_at >= shift.opened_at && e.spent_at <= shiftClose
-      })
+      const shiftExpenses = (expenses || []).filter((e: any) =>
+        e.spent_at >= shift.opened_at && e.spent_at <= shiftClose
+      )
       const pengeluaran = shiftExpenses.reduce((s: number, e: any) => s + Number(e.amount || 0), 0)
 
       shiftStats.value[shift.id] = {
@@ -214,13 +230,13 @@ const closeShift = async () => {
 }
 
 const totalShifts = computed(() => shifts.value.length)
-const closedShifts = computed(() => shifts.value.filter((item) => item.status === 'closed').length)
-const totalOpeningCash = computed(() => shifts.value.reduce((sum, item) => sum + Number(item.opening_cash || 0), 0))
-const averageDifference = computed(() => {
-  const closed = shifts.value.filter((item) => item.status === 'closed')
-  if (!closed.length) return 0
-  return closed.reduce((sum, item) => sum + Number(item.cash_difference || 0), 0) / closed.length
-})
+const activeShiftCount = computed(() => activeShift.value ? 1 : 0)
+const totalOmzetAllShifts = computed(() =>
+  Object.values(shiftStats.value).reduce((s, stat) => s + (stat.omzet || 0), 0)
+)
+const totalOmzetBersihAllShifts = computed(() =>
+  Object.values(shiftStats.value).reduce((s, stat) => s + (stat.omzetBersih || 0), 0)
+)
 
 onMounted(async () => {
   await workspace.bootstrap()
@@ -253,7 +269,7 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     <div class="shift-kpi-grid">
       <article class="kpi-card">
         <h3>Shift aktif</h3>
-        <div class="value">{{ activeShift ? '1' : '0' }}</div>
+        <div class="value">{{ activeShiftCount }}</div>
         <div class="hint">Status outlet saat ini</div>
       </article>
       <article class="kpi-card">
@@ -262,14 +278,16 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
         <div class="hint">Riwayat 50 terakhir</div>
       </article>
       <article class="kpi-card">
-        <h3>Ditutup</h3>
-        <div class="value">{{ closedShifts }}</div>
-        <div class="hint">Sudah direkonsiliasi</div>
+        <h3>Total omzet</h3>
+        <div class="value" style="font-size:16px;">{{ formatCurrency(totalOmzetAllShifts) }}</div>
+        <div class="hint">Akumulasi semua shift</div>
       </article>
       <article class="kpi-card">
-        <h3>Rata selisih</h3>
-        <div class="value">{{ formatCurrency(averageDifference) }}</div>
-        <div class="hint">Akumulasi selisih kas</div>
+        <h3>Omzet bersih</h3>
+        <div class="value" style="font-size:16px;" :class="totalOmzetBersihAllShifts >= 0 ? 'text-success' : 'text-danger'">
+          {{ formatCurrency(totalOmzetBersihAllShifts) }}
+        </div>
+        <div class="hint">Omzet − pengeluaran</div>
       </article>
     </div>
 
