@@ -40,6 +40,7 @@ const paymentOptions = [
 const menus = ref<MenuRow[]>([])
 const loading = ref(false)
 const submitting = ref(false)
+const submittingOpen = ref(false)
 const search = ref('')
 const selectedCategory = ref('Semua')
 const customerName = ref('')
@@ -229,6 +230,45 @@ const submitOrder = async () => {
   }
 }
 
+
+const saveOpenOrder = async () => {
+  if (!workspace.activeOutletId.value || cart.value.length === 0) return
+  if (!customerName.value.trim()) {
+    errorMessage.value = 'Isi nama pelanggan dulu untuk bayar nanti.'
+    showCartSheet.value = true
+    return
+  }
+  try {
+    submittingOpen.value = true
+    errorMessage.value = ''
+    const { data, error } = await supabase.rpc('save_open_order_pos', {
+      payload: {
+        outlet_id: workspace.activeOutletId.value,
+        customer_name: customerName.value.trim(),
+        order_type: orderType.value,
+        notes: notes.value.trim() || null,
+        items: cart.value.map((item) => ({
+          menu_id: item.id,
+          item_name: item.name,
+          qty: item.qty,
+          unit_price: item.price,
+          cost_price: item.cost_price,
+          notes: item.notes?.trim() || null
+        }))
+      }
+    })
+    if (error) throw error
+    if (data?.ok === false) throw new Error(data.error)
+    resetForm()
+    await navigateTo('/tagihan')
+  } catch (e: any) {
+    errorMessage.value = e?.message || 'Gagal menyimpan tagihan.'
+    showCartSheet.value = true
+  } finally {
+    submittingOpen.value = false
+  }
+}
+
 onMounted(async () => {
   await workspace.bootstrap()
   await Promise.all([loadMenus(), loadRecentOrders()])
@@ -243,16 +283,15 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
 <template>
   <div class="page page-pos">
-    <section class="pos-hero card">
-      <div class="pos-hero-top">
-        <div>
-          <p class="eyebrow">Kasir mobile-first</p>
-          <h1 class="pos-hero-title">Kasir</h1>
-        </div>
+    <section class="pos-hero card glass">
+      <div>
+        <p class="eyebrow">Kasir mobile-first</p>
+        <h1 class="title">Kasir</h1>
+        <p class="subtitle">Tampilan dipadatkan untuk HP: pilih produk cepat, lihat keranjang jelas, lalu bayar tanpa bolak-balik layar.</p>
       </div>
 
       <div class="pos-summary-grid">
-        <article class="summary-chip-card" :class="{ active: totalQty > 0 }">
+        <article class="summary-chip-card active">
           <span class="summary-label">Keranjang</span>
           <strong>{{ totalQty }} item</strong>
         </article>
@@ -261,8 +300,8 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
           <strong>{{ formatCurrency(todayRevenue) }}</strong>
         </article>
         <article class="summary-chip-card">
-          <span class="summary-label">Transaksi</span>
-          <strong>{{ todaySales.length }}x</strong>
+          <span class="summary-label">Transaksi hari ini</span>
+          <strong>{{ todaySales.length }}</strong>
         </article>
       </div>
     </section>
@@ -466,6 +505,14 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
 
         <div class="order-footer-actions">
           <button class="btn btn-secondary" @click="resetForm">Reset</button>
+          <button
+            class="btn btn-outline-secondary"
+            :disabled="submittingOpen || cart.length === 0"
+            @click="saveOpenOrder"
+            title="Simpan tagihan, bayar nanti"
+          >
+            {{ submittingOpen ? 'Menyimpan...' : 'Bayar nanti' }}
+          </button>
           <button class="btn btn-dark btn-lg" :disabled="submitting || !canSubmit" @click="submitOrder">
             {{ submitting ? 'Menyimpan...' : `Bayar ${formatCurrency(subtotal)}` }}
           </button>
