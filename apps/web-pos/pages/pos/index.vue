@@ -56,6 +56,25 @@ const showSuccessSheet = ref(false)
 const lastOrder = ref<any | null>(null)
 const viewMode = ref<'list' | 'grid'>('list')
 
+// Order detail modal
+const selectedOrder = ref<any | null>(null)
+const loadingDetail = ref(false)
+
+const openOrderDetail = async (order: any) => {
+  selectedOrder.value = { ...order, order_items: null }
+  loadingDetail.value = true
+  try {
+    const detail = await orderService.getOrderDetails(order.id)
+    selectedOrder.value = detail
+  } catch {
+    // keep basic data
+  } finally {
+    loadingDetail.value = false
+  }
+}
+
+const closeOrderDetail = () => { selectedOrder.value = null }
+
 const formatCurrency = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`
 const shortId = (id: string) => `#${(id || '').slice(-8).toUpperCase()}`
 
@@ -128,7 +147,7 @@ const loadMenus = async () => {
 const loadRecentOrders = async () => {
   if (!workspace.activeOutletId.value) return
   try {
-    recentOrders.value = await orderService.listLatest(workspace.activeOutletId.value, 8)
+    recentOrders.value = await orderService.listLatest(workspace.activeOutletId.value, 100)
   } catch {
     // Recent orders gagal tidak perlu blok UI
   }
@@ -523,21 +542,26 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     <section class="card stack recent-order-card">
       <div class="section-title">
         <div>
-          <h2 style="margin: 0">Transaksi terbaru</h2>
+          <h2 style="margin: 0">Transaksi hari ini</h2>
           <p class="subtitle">Riwayat singkat untuk cek order yang baru masuk.</p>
         </div>
         <button class="btn btn-secondary" @click="loadRecentOrders">Refresh</button>
       </div>
 
-      <div v-if="!recentOrders.length" class="empty-state">Belum ada transaksi terbaru pada outlet ini.</div>
-      <div v-else class="recent-order-list">
-        <article v-for="order in recentOrders" :key="order.id" class="recent-order-item">
-          <div>
-            <strong>{{ shortId(order.id) }}</strong>
-            <p class="muted small">{{ order.customer_name || 'Umum' }} · {{ order.payment_method }} · {{ new Date(order.created_at).toLocaleString('id-ID') }}</p>
+      <div v-if="!todaySales.length" class="empty-state">Belum ada transaksi hari ini.</div>
+      <div v-else class="today-order-list">
+        <button
+          v-for="order in todaySales"
+          :key="order.id"
+          class="today-order-item"
+          @click="openOrderDetail(order)"
+        >
+          <div class="today-order-left">
+            <span class="today-order-id">{{ shortId(order.id) }}</span>
+            <span class="today-order-meta">{{ order.customer_name || 'Umum' }} · {{ order.payment_method }}</span>
           </div>
-          <strong>{{ formatCurrency(order.total) }}</strong>
-        </article>
+          <strong class="today-order-total">{{ formatCurrency(order.total) }}</strong>
+        </button>
       </div>
     </section>
 
@@ -549,6 +573,65 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
     </div>
 
     <div v-if="showCartSheet" class="mobile-sheet-backdrop mobile-only" @click="showCartSheet = false" />
+
+    <!-- Order Detail Modal -->
+    <div v-if="selectedOrder" class="modal-backdrop" @click="closeOrderDetail">
+      <div class="modal-card order-detail-modal" @click.stop>
+        <div class="order-detail-header">
+          <div>
+            <span class="eyebrow">Detail Transaksi</span>
+            <h2 style="margin:4px 0 0; font-size:18px;">{{ shortId(selectedOrder.id) }}</h2>
+          </div>
+          <button class="btn btn-secondary btn-sm" @click="closeOrderDetail">✕</button>
+        </div>
+
+        <div v-if="loadingDetail" class="empty-state">Memuat detail...</div>
+
+        <template v-else>
+          <div class="order-detail-meta">
+            <div class="order-detail-meta-item">
+              <span class="muted small">Pelanggan</span>
+              <strong>{{ selectedOrder.customer_name || 'Umum' }}</strong>
+            </div>
+            <div class="order-detail-meta-item">
+              <span class="muted small">Metode</span>
+              <strong>{{ selectedOrder.payment_method }}</strong>
+            </div>
+            <div class="order-detail-meta-item">
+              <span class="muted small">Tipe</span>
+              <strong>{{ selectedOrder.order_type || '-' }}</strong>
+            </div>
+            <div class="order-detail-meta-item">
+              <span class="muted small">Waktu</span>
+              <strong>{{ new Date(selectedOrder.paid_at || selectedOrder.created_at).toLocaleString('id-ID') }}</strong>
+            </div>
+          </div>
+
+          <div v-if="selectedOrder.order_items?.length" class="order-detail-items">
+            <div class="eyebrow" style="margin-bottom:8px;">Pesanan</div>
+            <div
+              v-for="item in selectedOrder.order_items"
+              :key="item.id"
+              class="order-detail-item-row"
+            >
+              <span class="order-detail-item-qty">{{ item.qty }}×</span>
+              <span class="order-detail-item-name">{{ item.item_name }}</span>
+              <span class="order-detail-item-price">{{ formatCurrency(item.subtotal || item.qty * item.unit_price) }}</span>
+            </div>
+          </div>
+
+          <div class="order-detail-summary">
+            <div class="summary-row"><span class="muted">Total</span><strong>{{ formatCurrency(selectedOrder.total) }}</strong></div>
+            <div class="summary-row"><span class="muted">Dibayar</span><strong>{{ formatCurrency(selectedOrder.paid_amount) }}</strong></div>
+            <div class="summary-row"><span class="muted">Kembalian</span><strong>{{ formatCurrency(selectedOrder.change_amount || 0) }}</strong></div>
+          </div>
+
+          <div v-if="selectedOrder.notes" class="order-detail-notes">
+            <span class="muted small">Catatan: </span>{{ selectedOrder.notes }}
+          </div>
+        </template>
+      </div>
+    </div>
 
     <div v-if="showSuccessSheet && lastOrder" class="modal-backdrop" @click="showSuccessSheet = false">
       <div class="modal-card success-state-card" @click.stop>
@@ -723,5 +806,148 @@ watch(() => workspace.activeOutletId.value, async (value, oldValue) => {
   font-size: 12px;
   border-radius: 8px;
   margin-top: auto;
+}
+
+/* === TODAY ORDER LIST === */
+.today-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.today-order-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+  font: inherit;
+}
+
+.today-order-item:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.today-order-item:active {
+  background: #fde8cc;
+}
+
+.today-order-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.today-order-id {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.today-order-meta {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.today-order-total {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* === ORDER DETAIL MODAL === */
+.order-detail-modal {
+  max-width: 420px;
+  width: 100%;
+  display: grid;
+  gap: 16px;
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
+.order-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.order-detail-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.order-detail-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.order-detail-items {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}
+
+.order-detail-item-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 14px;
+}
+
+.order-detail-item-qty {
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.order-detail-item-name {
+  font-weight: 500;
+}
+
+.order-detail-item-price {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.order-detail-summary {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}
+
+.order-detail-notes {
+  font-size: 13px;
+  color: var(--text-2);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  border: 1px solid #fde68a;
 }
 </style>
